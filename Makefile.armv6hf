@@ -1,0 +1,8 @@
+CFLAGS  ?= -Wall -fPIC -O2 $(OPTS) $(INCLUDE) $(DEFINES)
+LDFLAGS ?= -lgomp -lpthread -lssl -lcrypto -ldl -lm -lrt -lz -L. 
+
+OBJ			= bin/armv6hf
+EXECUTABLE 	= bin/raop_play-armv6hf
+
+include Makefile
+

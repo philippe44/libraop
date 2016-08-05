@@ -1,0 +1,8 @@
+CFLAGS  ?= -Wall -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES)
+LDFLAGS ?= -lpthread -lcrypto -ldl -lm -lrt -lz -L. 
+
+OBJ			= bin/x86-64
+EXECUTABLE 	= bin/raop_play-x86-64
+
+include Makefile
+

@@ -1,0 +1,429 @@
+/*****************************************************************************
+ * rtsp_play.c: RAOP Client player
+ *
+ * Copyright (C) 2004 Shiro Ninomiya <shiron@snino.com>
+ *				 2016 Philippe <philippe_44@outlook.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
+ *****************************************************************************/
+
+#include <stdio.h>
+#include <signal.h>
+#include <fcntl.h>
+#include "platform.h"
+
+#if WIN
+#include <conio.h>
+#include <time.h>
+#else
+#include <unistd.h>
+#include <termios.h>
+#include <sys/param.h>
+#include <sys/time.h>
+#if OSX || FREEBDS
+#include <sys/resource.h>
+#endif
+#endif
+
+#include "aexcl_lib.h"
+#include "raop_client.h"
+#include "alac_wrapper.h"
+
+#define SEC(ntp) ((__u32) ((ntp) >> 32))
+#define FRAC(ntp) ((__u32) (ntp))
+#define SECNTP(ntp) SEC(ntp),FRAC(ntp)
+
+log_level	util_loglevel;
+log_level	raop_loglevel;
+log_level 	main_log;
+
+log_level *loglevel =&main_log;
+
+struct debug_s {
+	int main, raop, util;
+} debug[] = { { lSILENCE, lSILENCE, lSILENCE },
+			{ lERROR, lERROR, lERROR },
+			{ lINFO, lERROR, lERROR },
+			{ lINFO, lINFO, lERROR },
+			{ lDEBUG, lERROR, lERROR },
+			{ lDEBUG, lINFO, lERROR },
+			{ lDEBUG, lDEBUG, lERROR },
+			{ lSDEBUG, lINFO, lERROR },
+			{ lSDEBUG, lDEBUG, lERROR },
+			{ lSDEBUG, lSDEBUG, lERROR },
+		};
+
+/*----------------------------------------------------------------------------*/
+static int print_usage(char *argv[])
+{
+	char *name = strrchr(argv[0], '\\');
+
+	name = (name) ? name + 1 :argv[0];
+
+	printf("usage: %s [-p <port number>] [-v <volume> (0-100)] "
+			   "[-l <latency> (frames] [-q <queue>(frames)] "
+			   "[-e (encrypt)] "
+			   "[-w <wait ms to start>] [-n <start at NTP>] "
+			   "[-d <debug level> (0 = silent)] "
+   			   "[-i (interactive - commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit] "
+			   "<server_ip audio_filename> ('-' for stdin)\n",
+			   name);
+	return -1;
+}
+
+
+#if WIN
+
+struct timezone
+{
+	int  tz_minuteswest; /* minutes W of Greenwich */
+	int  tz_dsttime;     /* type of dst correction */
+};
+
+#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
+	#define DELTA_EPOCH_IN_MICROSECS  11644473600000000Ui64
+#else
+	#define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
+#endif
+
+/*----------------------------------------------------------------------------*/
+static int gettimeofday(struct timeval *tv, struct timezone *tz)
+{
+	FILETIME ft;
+	unsigned __int64 tmpres = 0;
+	static int tzflag;
+
+	if (tv) {
+		GetSystemTimeAsFileTime(&ft);
+
+		tmpres |= ft.dwHighDateTime;
+		tmpres <<= 32;
+		tmpres |= ft.dwLowDateTime;
+
+		/*converting file time to unix epoch*/
+		tmpres /= 10;  /*convert into microseconds*/
+		tmpres -= DELTA_EPOCH_IN_MICROSECS;
+		tv->tv_sec = (long)(tmpres / 1000000UL);
+		tv->tv_usec = (long)(tmpres % 1000000UL);
+	}
+
+	if (tz) {
+		if (!tzflag) {
+			_tzset();
+			tzflag++;
+		}
+		tz->tz_minuteswest = _timezone / 60;
+		tz->tz_dsttime = _daylight;
+	}
+
+	return 0;
+}
+
+#else // WIN
+
+/*----------------------------------------------------------------------------*/
+static int kbhit()
+{
+	struct timeval tv;
+
+	fd_set fds;
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	FD_ZERO(&fds);
+	FD_SET(STDIN_FILENO, &fds); //STDIN_FILENO is 0
+	select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+	return FD_ISSET(STDIN_FILENO, &fds);
+}
+
+/*----------------------------------------------------------------------------*/
+static void set_termio(bool canon) {
+	struct termios ios = {0};
+
+	tcgetattr(0, &ios);
+
+	if (canon) {
+		ios.c_lflag |= ICANON;
+		ios.c_lflag |= ECHO;
+		tcsetattr(0, TCSADRAIN, &ios);
+	}
+	else {
+		ios.c_lflag &= ~ICANON;
+		ios.c_lflag &= ~ECHO;
+		ios.c_cc[VMIN] = 1;
+		ios.c_cc[VTIME] = 0;
+		tcsetattr(0, TCSANOW, &ios);
+	}
+}
+
+/*----------------------------------------------------------------------------*/
+static char _getch() {
+	char buf;
+
+	if (read(0, &buf, 1)) return buf;
+
+	return '\0';
+}
+
+#endif
+
+
+/*----------------------------------------------------------------------------*/
+static void init_platform(bool interactive) {
+#if WIN
+	WSADATA wsaData;
+	WORD wVersionRequested = MAKEWORD(2, 2);
+	int WSerr = WSAStartup(wVersionRequested, &wsaData);
+	if (WSerr != 0) exit(1);
+#else
+	if (interactive) set_termio(false);
+#endif
+}
+
+/*----------------------------------------------------------------------------*/
+static void close_platform(bool interactive) {
+#if WIN
+	WSACleanup();
+#else
+	if (interactive) set_termio(true);
+#endif
+}
+
+/*----------------------------------------------------------------------------*/
+__u64 get_ntp(struct ntp_s *ntp)
+{
+	struct timeval ctv;
+	struct ntp_s local;
+
+	gettimeofday(&ctv, NULL);
+	local.seconds  = ctv.tv_sec + 0x83AA7E80;
+	local.fraction = (((__u64) ctv.tv_usec) << 32) / 1000000;
+
+	if (ntp) *ntp = local;
+
+	return (((__u64) local.seconds) << 32) + local.fraction;
+}
+
+
+/*----------------------------------------------------------------------------*/
+/*																			  */
+/*----------------------------------------------------------------------------*/
+int main(int argc, char *argv[]) {
+	struct raopcl_s *raopcl;
+	char *host = NULL, *fname = NULL;
+	int port = 5000;
+	int volume = 50, wait = 0, latency = 11025, queue = MS2TS(1000, 44100);
+	struct hostent *host_ip;
+	struct in_addr host_addr;
+	int infile;
+	u8_t *buf;
+	int i, n = -1, level = 2;
+	enum {STOPPED, PAUSED, PLAYING } status;
+	raop_crypto_t crypto = RAOP_CLEAR;
+	__u64 start = 0, last = 0, frames = 0;
+	bool interactive = false;
+
+	for(i = 1; i < argc; i++){
+		if(!strcmp(argv[i],"-p")){
+			port=atoi(argv[++i]);
+			continue;
+		}
+		if(!strcmp(argv[i],"-v")){
+			volume=atoi(argv[++i]);
+			continue;
+		}
+		if(!strcmp(argv[i],"-w")){
+			wait=atoi(argv[++i]);
+			continue;
+		}
+		if(!strcmp(argv[i],"-l")){
+			latency=atoi(argv[++i]);
+			continue;
+		}
+		if(!strcmp(argv[i],"-q")){
+			queue=atoi(argv[++i]);
+			continue;
+		}
+		if(!strcmp(argv[i],"-i")){
+			interactive = true;
+			continue;
+		}
+
+		if(!strcmp(argv[i],"-n")){
+			sscanf(argv[++i], "%llu", &start);
+			continue;
+		}
+		if(!strcmp(argv[i],"-d")){
+			level = atoi(argv[++i]);
+			if (level >= sizeof(debug) / sizeof(struct debug_s)) {
+				level = sizeof(debug) / sizeof(struct debug_s) - 1;
+			}
+			continue;
+		}
+		if(!strcmp(argv[i],"-e")){
+			crypto = RAOP_RSA;
+			continue;
+		}
+		if(!strcmp(argv[i],"--help") || !strcmp(argv[i],"-h"))
+			return print_usage(argv);
+		if(!host) {host=argv[i]; continue;}
+		if(!fname) {fname=argv[i]; continue;}
+	}
+	if (!host) return print_usage(argv);
+	if (!fname) return print_usage(argv);
+
+
+	util_loglevel = debug[level].util;
+	raop_loglevel = debug[level].raop;
+	main_log = debug[level].main;
+
+	if (!strcmp(fname, "-")) {
+		infile = fileno(stdin);
+		interactive = false;
+	}
+	else {
+		if ((infile = open(fname, O_RDONLY)) == -1) {
+			LOG_ERROR("cannot open file %s", fname);
+			close_platform(interactive);
+			exit(1);
+		}
+	}
+
+#if WIN
+	setmode(infile, O_BINARY);
+#endif
+
+	init_platform(interactive);
+
+	if ((raopcl = raopcl_create("?", NULL, NULL, RAOP_ALAC, MAX_SAMPLES_PER_CHUNK,
+								queue, latency, crypto, 44100, 16, 2, volume)) == NULL) {
+		LOG_ERROR("Cannot init RAOP %p", raopcl);
+		close_platform(interactive);
+		exit(1);
+	}
+
+	host_ip = gethostbyname(host);
+	memcpy(&host_addr.s_addr, host_ip->h_addr_list[0], host_ip->h_length);
+
+	if (!raopcl_connect(raopcl, host_addr, port, RAOP_ALAC)) {
+		raopcl_destroy(raopcl);
+		free(raopcl);
+		LOG_ERROR("Cannot connect to AirPlay device %s", host);
+		close_platform(interactive);
+		exit(1);
+	}
+
+	latency = raopcl_latency(raopcl);
+
+	LOG_INFO("connected to %s, player latency is %d ms", host,
+			 (int) TS2MS(latency, raopcl_sample_rate(raopcl)));
+
+	if (wait) {
+		__u64 now = get_ntp(NULL);
+		__u64 start_at = now + MS2NTP(wait) -
+						 TS2NTP(latency, raopcl_sample_rate(raopcl));
+
+		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", SECNTP(now),
+				 SECNTP(start_at),
+				 NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))));
+		raopcl_start_at(raopcl, start_at);
+	}
+
+	if (start) {
+		raopcl_start_at(raopcl, start - TS2NTP(latency, raopcl_sample_rate(raopcl)));
+	}
+
+	start = get_ntp(NULL);
+	status = PLAYING;
+
+	buf = malloc(MAX_SAMPLES_PER_CHUNK*4);
+
+	do {
+		__u8 *buffer;
+		__u64 playtime, now;
+		int size;
+
+		now = get_ntp(NULL);
+
+		if (now - last > MS2NTP(1000)) {
+			__u64 played = TS2MS(frames - raopcl_queued_frames(raopcl) - latency,
+								 raopcl_sample_rate(raopcl));
+
+			last = now;
+			if (frames >= raopcl_queue_len(raopcl)) {
+				LOG_INFO("at %u.%u (%Lu ms after start), played %Lu ms",
+						  SECNTP(now), NTP2MS(now - start), played);
+			}
+		}
+
+		if (status == PLAYING && raopcl_accept_frames(raopcl) >= MAX_SAMPLES_PER_CHUNK) {
+			n = read(infile, buf, MAX_SAMPLES_PER_CHUNK*4);
+			if (!n)	continue;
+			pcm_to_alac_fast((__u32*) buf, MAX_SAMPLES_PER_CHUNK, &buffer, &size,
+							 MAX_SAMPLES_PER_CHUNK);
+			raopcl_send_chunk(raopcl, buffer, size, &playtime);
+			frames += MAX_SAMPLES_PER_CHUNK;
+			free(buffer);
+		}
+
+		if (interactive && kbhit()) {
+			char c = _getch();
+
+			switch (c) {
+			case 'p':
+				if (status == PLAYING) {
+					raopcl_pause(raopcl);
+					raopcl_flush(raopcl);
+					status = PAUSED;
+					LOG_INFO("Pause at : %u.%u", SECNTP(get_ntp(NULL)));
+				}
+				break;
+			case 's':
+				raopcl_stop(raopcl);
+				raopcl_flush(raopcl);
+				status = STOPPED;
+				LOG_INFO("Stopped at : %u.%u", SECNTP(get_ntp(NULL)));
+				break;
+			case 'r': {
+				__u64 now = get_ntp(NULL);
+				__u64 start_at = now + MS2NTP(200) - TS2NTP(latency, raopcl_sample_rate(raopcl));
+
+				status = PLAYING;
+				raopcl_start_at(raopcl, start_at);
+				LOG_INFO("Re-started at : %u.%u", SECNTP(start_at));
+				}
+				break;
+			case 'q':
+				raopcl_disconnect(raopcl);
+				raopcl_destroy(raopcl);
+				free(buf);
+				close_platform(interactive);
+				exit(0);
+			default: break;
+			}
+		}
+
+	} while (n || raopcl_queued_frames(raopcl));
+
+	raopcl_disconnect(raopcl);
+	raopcl_destroy(raopcl);
+	free(buf);
+
+	close_platform(interactive);
+
+	return 0;
+}
+
+
+
