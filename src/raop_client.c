@@ -154,6 +154,8 @@
   - At frame 2491, cons=2491-2490=1, total=0, so avail=1, the client can send 1
 	frame. Such frame will he heard in 2501, but this next frame is the 311th
 	frame, so it would be played with 100+10+1 frames early.
+  - ... so reality says 100+20-1, need to check why (and this is not platform
+   dependent)
 */
 
 
@@ -214,7 +216,6 @@ typedef struct raopcl_s {
 	pthread_t time_thread, ctrl_thread;
 	pthread_mutex_t mutex;
 	bool time_running, ctrl_running;
-	pthread_cond_t flush_cond;
 	int sample_rate, sample_size, channels;
 	raop_codec_t codec;
 	raop_crypto_t crypto;
@@ -419,9 +420,8 @@ __u32 raopcl_accept_frames(struct raopcl_s *p)
 
 			if (first_pkt) _raopcl_send_sync(p, true);
 
-			// check that it is chunk_len and not + 1 - might cause a gap
-			//p->head_ts += len + 2*p->latency_frames + p->chunk_len;
-			p->head_ts += len + 2*p->latency_frames;
+			// see above for the explanation of the correction
+			p->head_ts += len + 2*p->latency_frames - p->chunk_len;
 
 			LOG_INFO("[%p]: restarting w/ pause n:%u.%u, hts:%Lu", p, SECNTP(now), p->head_ts);
 
@@ -685,7 +685,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, b
 
 
 /*----------------------------------------------------------------------------*/
-struct raopcl_s *raopcl_create(char *local, char *DACP_id, char *active_remote,
+struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int chunk_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
 							   int sample_rate, int sample_size, int channels, int volume)
@@ -717,8 +717,7 @@ struct raopcl_s *raopcl_create(char *local, char *DACP_id, char *active_remote,
 	raopcld->queue_len = queue_len;
 	strcpy(raopcld->DACP_id, DACP_id ? DACP_id : "");
 	strcpy(raopcld->active_remote, active_remote ? active_remote : "");
-	if (!local || strstr(local, "?")) raopcld->local_addr.s_addr = INADDR_ANY;
-	else raopcld->local_addr.s_addr = inet_addr(local);
+	raopcld->local_addr = local;
 	raopcld->rtp_ports.ctrl.fd = raopcld->rtp_ports.time.fd = raopcld->rtp_ports.audio.fd = -1;
 
 	// init RTSP if needed
@@ -729,7 +728,6 @@ struct raopcl_s *raopcl_create(char *local, char *DACP_id, char *active_remote,
 	}
 
 	pthread_mutex_init(&raopcld->mutex, NULL);
-	pthread_cond_init(&raopcld->flush_cond, NULL);
 
 	RAND_bytes(raopcld->iv, sizeof(raopcld->iv));
 	VALGRIND_MAKE_MEM_DEFINED(raopcld->iv, sizeof(raopcld->iv));
@@ -1078,7 +1076,6 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	pthread_mutex_lock(&p->mutex);
 	p->state = RAOP_FLUSHED;
 	p->flushing = true;
-	pthread_cond_signal(&p->flush_cond);
 	pthread_mutex_unlock(&p->mutex);
 
 	if (!raopcl_set_volume(p, p->volume, true)) goto erexit;
@@ -1118,7 +1115,6 @@ bool raopcl_flush(struct raopcl_s *p)
 
 	pthread_mutex_lock(&p->mutex);
 	p->state = RAOP_FLUSHED;
-	pthread_cond_signal(&p->flush_cond);
 	pthread_mutex_unlock(&p->mutex);
 
 	return rc;
@@ -1173,7 +1169,6 @@ bool raopcl_destroy(struct raopcl_s *p)
 	_raopcl_terminate_rtp(p);
 	rc = rtspcl_destroy(p->rtspcl);
 	pthread_mutex_destroy(&p->mutex);
-	pthread_cond_destroy(&p->flush_cond);
 	free(p);
 
 	return rc;
@@ -1190,7 +1185,6 @@ bool raopcl_sanitize(struct raopcl_s *p)
 	p->head_ts = p->offset_ts = p->pause_ts = p->start_ts = p->first_ts = 0;
 	p->first_pkt = false;
 	p->flushing = false;
-	pthread_cond_signal(&p->flush_cond);
 
 	pthread_mutex_unlock(&p->mutex);
 

@@ -57,10 +57,8 @@ Win32
 *.res
 
 # Misc
-bin/
 *.o
 *.obj
-bin/
 *.cmd
 *.save*
 *.pcm

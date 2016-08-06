@@ -221,11 +221,14 @@ __u64 get_ntp(struct ntp_s *ntp)
 /*----------------------------------------------------------------------------*/
 int main(int argc, char *argv[]) {
 	struct raopcl_s *raopcl;
-	char *host = NULL, *fname = NULL;
+	char *fname = NULL;
 	int port = 5000;
 	int volume = 50, wait = 0, latency = 11025, queue = MS2TS(1000, 44100);
-	struct hostent *host_ip;
-	struct in_addr host_addr;
+	struct {
+		struct hostent *hostent;
+		char *name;
+		struct in_addr addr;
+	} player = { NULL, NULL, { INADDR_ANY } };
 	int infile;
 	u8_t *buf;
 	int i, n = -1, level = 2;
@@ -233,6 +236,7 @@ int main(int argc, char *argv[]) {
 	raop_crypto_t crypto = RAOP_CLEAR;
 	__u64 start = 0, last = 0, frames = 0;
 	bool interactive = false;
+	struct in_addr host = { INADDR_ANY };
 
 	for(i = 1; i < argc; i++){
 		if(!strcmp(argv[i],"-p")){
@@ -277,12 +281,12 @@ int main(int argc, char *argv[]) {
 		}
 		if(!strcmp(argv[i],"--help") || !strcmp(argv[i],"-h"))
 			return print_usage(argv);
-		if(!host) {host=argv[i]; continue;}
-		if(!fname) {fname=argv[i]; continue;}
+		if (!player.name) {player.name = argv[i]; continue;}
+		if (!fname) {fname=argv[i]; continue;}
 	}
-	if (!host) return print_usage(argv);
-	if (!fname) return print_usage(argv);
 
+	if (!player.name) return print_usage(argv);
+	if (!fname) return print_usage(argv);
 
 	util_loglevel = debug[level].util;
 	raop_loglevel = debug[level].raop;
@@ -306,17 +310,17 @@ int main(int argc, char *argv[]) {
 
 	init_platform(interactive);
 
-	if ((raopcl = raopcl_create("?", NULL, NULL, RAOP_ALAC, MAX_SAMPLES_PER_CHUNK,
+	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, MAX_SAMPLES_PER_CHUNK,
 								queue, latency, crypto, 44100, 16, 2, volume)) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);
 		close_platform(interactive);
 		exit(1);
 	}
 
-	host_ip = gethostbyname(host);
-	memcpy(&host_addr.s_addr, host_ip->h_addr_list[0], host_ip->h_length);
+	player.hostent = gethostbyname(player.name);
+	memcpy(&player.addr.s_addr, player.hostent->h_addr_list[0], player.hostent->h_length);
 
-	if (!raopcl_connect(raopcl, host_addr, port, RAOP_ALAC)) {
+	if (!raopcl_connect(raopcl, player.addr, port, RAOP_ALAC)) {
 		raopcl_destroy(raopcl);
 		free(raopcl);
 		LOG_ERROR("Cannot connect to AirPlay device %s", host);

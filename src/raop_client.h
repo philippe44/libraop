@@ -156,7 +156,7 @@ typedef struct {
 } __attribute__ ((packed)) rtp_audio_pkt_t;
 #endif
 
-struct raopcl_s *raopcl_create(char *local, char *DACP_id, char *active_remote,
+struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int frame_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
 							   int sample_rate, int sample_size, int channels, int volume);
