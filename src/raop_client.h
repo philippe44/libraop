@@ -112,10 +112,10 @@ typedef enum raop_codec_s { RAOP_NOCODEC = -1, RAOP_PCM = 0, RAOP_ALAC, RAOP_AAC
 							RAOP_AAL_ELC } raop_codec_t;
 
 typedef enum raop_crypto_s { RAOP_CLEAR = 0, RAOP_RSA, RAOP_FAIRPLAY, RAOP_MFISAP,
-							RAOP_FAIRPLAYSAP } raop_crypto_t;
+							 RAOP_FAIRPLAYSAP } raop_crypto_t;
 
-typedef enum raop_states_s { RAOP_DOWN_FULL = 0, RAOP_PEER_DISCONNECT, RAOP_DOWN,
-							 RAOP_FLUSHING, RAOP_FLUSHED, RAOP_STREAMING } raop_state_t;
+typedef enum raop_states_s { RAOP_DOWN = 0, RAOP_FLUSHING, RAOP_FLUSHED,
+							 RAOP_STREAMING } raop_state_t;
 
 typedef struct {
 	int channels;
@@ -160,37 +160,43 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 							   raop_codec_t codec, int frame_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
 							   int sample_rate, int sample_size, int channels, int volume);
+
+// Functions thread category A
 bool	raopcl_destroy(struct raopcl_s *p);
 bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
 bool 	raopcl_reconnect(struct raopcl_s *p);
 bool 	raopcl_disconnect(struct raopcl_s *p);
-bool 	raopcl_teardown(struct raopcl_s *p);
-bool 	raopcl_close(struct raopcl_s *p);
-bool 	raopcl_sanitize(struct raopcl_s *p);
-
 bool    raopcl_flush(struct raopcl_s *p);
-bool 	raopcl_start_at(struct raopcl_s *p, __u64 start_time);
-void 	raopcl_pause(struct raopcl_s *p);
-void 	raopcl_stop(struct raopcl_s *p);
 
-__u32 	raopcl_accept_frames(struct raopcl_s *p);
-__u32 	raopcl_queued_frames(struct raopcl_s *p);
-bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
-
-__u32 	raopcl_latency(struct raopcl_s *p);
-__u32 	raopcl_sample_rate(struct raopcl_s *p);
-raop_state_t raopcl_state(struct raopcl_s *p);
-__u32 	raopcl_queue_len(struct raopcl_s *p);
-
-bool 	raopcl_is_sane(struct raopcl_s *p);
-bool 	raopcl_is_connected(struct raopcl_s *p);
-
-bool 	raopcl_set_content(raopcl_t *p, char* itemname, char* songartist, char* songalbum);
+// Functions thread category B
 bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);
 bool 	raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration);
 bool 	raopcl_set_volume(struct raopcl_s *p, int vol, bool force);
 bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
 bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
+
+// Functions thread category C
+__u32 	raopcl_accept_frames(struct raopcl_s *p);
+bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
+
+// Functions thread category D
+bool 	raopcl_start_at(struct raopcl_s *p, __u64 start_time);
+void 	raopcl_pause(struct raopcl_s *p);
+void 	raopcl_stop(struct raopcl_s *p);
+
+/*
+	The are thread safe
+*/
+__u32 	raopcl_latency(struct raopcl_s *p);
+__u32 	raopcl_sample_rate(struct raopcl_s *p);
+raop_state_t raopcl_state(struct raopcl_s *p);
+__u32 	raopcl_queue_len(struct raopcl_s *p);
+
+__u32 	raopcl_queued_frames(struct raopcl_s *p);
+
+bool 	raopcl_is_sane(struct raopcl_s *p);
+bool 	raopcl_is_connected(struct raopcl_s *p);
+bool 	raopcl_sanitize(struct raopcl_s *p);
 
 __u64 	raopcl_time32_to_ntp(__u32 time);
 

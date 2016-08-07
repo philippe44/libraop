@@ -41,7 +41,6 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *kd);
 bool rtspcl_record(struct rtspcl_s *p, __u16 start_seq, __u32 start_ts, key_data_t *kd);
 bool rtspcl_set_parameter(struct rtspcl_s *p, char *param);
 bool rtspcl_flush(struct rtspcl_s *p, __u16 seq_number, __u32 timestamp);
-bool rtspcl_teardown(struct rtspcl_s *p);
 bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list args);
 bool rtspcl_set_artwork(struct rtspcl_s *p, __u32 timestamp, char *content_type, int size, char *image);
 

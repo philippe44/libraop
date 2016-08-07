@@ -122,17 +122,18 @@ bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr hos
 /*----------------------------------------------------------------------------*/
 bool rtspcl_disconnect(struct rtspcl_s *p)
 {
+	bool rc = true;
+
 	if (!p) return false;
 
-
 	if (p->fd != -1) {
-		rtspcl_teardown(p);
+		rc = exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL);
 		close(p->fd);
 	}
 
 	p->fd = -1;
 
-	return true;
+	return rc;
 }
 
 
@@ -144,11 +145,9 @@ bool rtspcl_destroy(struct rtspcl_s *p)
 	if (!p) return false;
 
 	rc = rtspcl_disconnect(p);
-	rc &= rtspcl_remove_all_exthds(p);
 
 	if (p->session) free(p->session);
 	free(p);
-	p = NULL;
 
 	return rc;
 }
