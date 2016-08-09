@@ -72,20 +72,23 @@ static int print_usage(char *argv[])
 
 	name = (name) ? name + 1 :argv[0];
 
-	printf("usage: %s [-p <port number>] [-v <volume> (0-100)] "
-			   "[-l <latency> (frames] [-q <queue>(frames)] "
-			   "[-e (encrypt)] "
-			   "[-w <wait ms to start>] [-n <start at NTP>] "
-			   "[-d <debug level> (0 = silent)] "
-   			   "[-i (interactive - commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit] "
-			   "<server_ip audio_filename> ('-' for stdin)\n",
+	printf("usage: %s <options> <server_ip> <filename ('-' for stdin)>\n"
+			   "\t[-ntp <file>] write current NTP in <file> and exit\n"
+			   "\t[-p <port number>]\n"
+			   "\t[-v <volume> (0-100)]\n"
+			   "\t[-l <latency> (frames] [-q <queue>(frames)]\n"
+			   "\t[-w <wait>]  (start after <wait> milliseconds)\n"
+			   "\t[-n <start>] (start at NTP <start> + <wait>)\n"
+			   "\t[-nf <start>] (start at NTP in <file> + <wait>)\n"
+			   "\t[-e (encrypt)]\n"
+			   "\t[-d <debug level>] (0 = silent)\n"
+			   "\t[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit)\n",
 			   name);
 	return -1;
 }
 
 
 #if WIN
-
 struct timezone
 {
 	int  tz_minuteswest; /* minutes W of Greenwich */
@@ -234,11 +237,20 @@ int main(int argc, char *argv[]) {
 	int i, n = -1, level = 2;
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
-	__u64 start = 0, last = 0, frames = 0;
+	__u64 start = 0, start_at = 0, last = 0, frames = 0;
 	bool interactive = false;
 	struct in_addr host = { INADDR_ANY };
 
 	for(i = 1; i < argc; i++){
+		if(!strcmp(argv[i],"-ntp")){
+			FILE *out;
+
+			out = fopen(argv[2], "w");
+			fprintf(out, "%llu", get_ntp(NULL));
+			fclose(out);
+			exit(0);
+		}
+
 		if(!strcmp(argv[i],"-p")){
 			port=atoi(argv[++i]);
 			continue;
@@ -263,9 +275,18 @@ int main(int argc, char *argv[]) {
 			interactive = true;
 			continue;
 		}
-
 		if(!strcmp(argv[i],"-n")){
 			sscanf(argv[++i], "%llu", &start);
+			continue;
+		}
+		if(!strcmp(argv[i],"-nf")){
+			FILE *in;
+
+			in = fopen(argv[++i], "r");
+			if (!in || !fscanf(in, "%llu", &start)) {
+				LOG_ERROR("Cannot read NTP from file %s", argv[i]);
+			}
+			fclose(in);
 			continue;
 		}
 		if(!strcmp(argv[i],"-d")){
@@ -323,29 +344,29 @@ int main(int argc, char *argv[]) {
 	if (!raopcl_connect(raopcl, player.addr, port, RAOP_ALAC)) {
 		raopcl_destroy(raopcl);
 		free(raopcl);
-		LOG_ERROR("Cannot connect to AirPlay device %s", host);
+		LOG_ERROR("Cannot connect to AirPlay device %s, check firewall",
+				   inet_ntoa(player.addr));
 		close_platform(interactive);
 		exit(1);
 	}
 
 	latency = raopcl_latency(raopcl);
 
-	LOG_INFO("connected to %s, player latency is %d ms", host,
-			 (int) TS2MS(latency, raopcl_sample_rate(raopcl)));
+	LOG_INFO("connected to %s on port %d, player latency is %d ms", inet_ntoa(player.addr),
+			 port, (int) TS2MS(latency, raopcl_sample_rate(raopcl)));
 
-	if (wait) {
+	if (start || wait) {
 		__u64 now = get_ntp(NULL);
-		__u64 start_at = now + MS2NTP(wait) -
-						 TS2NTP(latency, raopcl_sample_rate(raopcl));
 
-		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", SECNTP(now),
-				 SECNTP(start_at),
-				 NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))));
+		start_at = (start ? start : now) + MS2NTP(wait) -
+					TS2NTP(latency, raopcl_sample_rate(raopcl));
+
+		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", SECNTP(now), SECNTP(start_at),
+				 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ?
+				  (__u32) NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) :
+				  0);
+
 		raopcl_start_at(raopcl, start_at);
-	}
-
-	if (start) {
-		raopcl_start_at(raopcl, start - TS2NTP(latency, raopcl_sample_rate(raopcl)));
 	}
 
 	start = get_ntp(NULL);
@@ -361,13 +382,12 @@ int main(int argc, char *argv[]) {
 		now = get_ntp(NULL);
 
 		if (now - last > MS2NTP(1000)) {
-			__u64 played = TS2MS(frames - raopcl_queued_frames(raopcl) - latency,
-								 raopcl_sample_rate(raopcl));
-
 			last = now;
-			if (frames >= raopcl_queue_len(raopcl)) {
+			if (frames && frames > raopcl_queued_frames(raopcl) + latency) {
 				LOG_INFO("at %u.%u (%Lu ms after start), played %Lu ms",
-						  SECNTP(now), NTP2MS(now - start), played);
+						  SECNTP(now), NTP2MS(now - start),
+						  TS2MS(frames - raopcl_queued_frames(raopcl) - latency,
+								raopcl_sample_rate(raopcl)));
 			}
 		}
 
