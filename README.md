@@ -8,14 +8,23 @@ The player is just and example how to use the library, but it has a few interest
 
 raop_play <options> <server_ip> <filename ('-' for stdin)>"
 	[-ntp <file>] write current NTP in <file> and exit
+	
 	[-p <port number>]
+	
 	[-v <volume> (0-100)]
+	
 	[-l <latency> (frames] [-q <queue>(frames)]
+	
 	[-w <wait>]  (start after <wait> milliseconds)
+	
 	[-n <start>] (start at NTP <start> + <wait>)
+	
 	[-nf <start>] (start at NTP in <file> + <wait>)
+	
 	[-e (encrypt)]
+	
 	[-d <debug level>] (0 = silent)
+	
 	[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit)
 	
 It's possible to send synchronous audio to multiple players by using the NTP options (optionally combined with the wait option).
