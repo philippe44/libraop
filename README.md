@@ -7,6 +7,7 @@ There is a small player can can play raw pcm form any file or stdin (useful for 
 The player is just and example how to use the library, but it has a few interesting options:
 
 raop_play <options> <server_ip> <filename ('-' for stdin)>"
+
 	[-ntp <file>] write current NTP in <file> and exit
 	
 	[-p <port number>]
