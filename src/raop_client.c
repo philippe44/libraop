@@ -503,7 +503,12 @@ __u32 raopcl_accept_frames(struct raopcl_s *p)
 		else {
 			// unpausing ...
 			__u16 n, i;
-			__u32 len = (p->head_ts - p->pause_ts);
+			/*
+			  if a multi_threaded application is stuck it the send() thread,
+			  then the pause_ts might be ahead of the head_ts and that would
+			  cause the loop below to be faulty and very long
+			*/
+			__u32 len = p->head_ts > p->pause_ts ? p->head_ts - p->pause_ts : 0;
 
 			// we have to re-send all the queue
 			_raopcl_set_timestamps(p);
@@ -663,8 +668,15 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, b
 	size_t n;
 	bool ret = true;
 
-	// do not send if audio port closed
-	if (p->rtp_ports.audio.fd == -1) return false;
+	/*
+	 Do not send if audio port closed or we are not yet in streaming state. We
+	 might be just waiting for flush to happen in the case of a device taking a
+	 lot of time to connect, so avoid disturbing it with frames. Still, for sync
+	 reasons or when a starting time has been set, it's normal that the caller
+	 uses raopcld_accept_frames() and tries to send frames even before the
+	 connect has returned in case of multi-threaded application
+	*/
+	if (p->rtp_ports.audio.fd == -1 || p->state != RAOP_STREAMING) return false;
 
 	addr.sin_family = AF_INET;
 	addr.sin_addr = p->host_addr;
