@@ -52,6 +52,7 @@
 #define SEC(ntp) ((__u32) ((ntp) >> 32))
 #define FRAC(ntp) ((__u32) (ntp))
 #define SECNTP(ntp) SEC(ntp),FRAC(ntp)
+#define MSEC(ntp)  ((__u32) ((((ntp) >> 16)*1000) >> 16))
 
 /*
  --- timestamps (ts), millisecond (ms) and network time protocol (ntp) ---
@@ -188,7 +189,11 @@ typedef struct raopcl_s {
 	struct rtspcl_s *rtspcl;
 	raop_state_t state;
 	char DACP_id[17], active_remote[11];
-	struct { int audio, ctrl, time; } sane;
+	struct {
+		unsigned int ctrl, time;
+		struct { unsigned int avail, select, send; } audio;
+	} sane;
+	unsigned int retransmit;
 	__u8 iv[16]; // initialization vector for aes-cbc
 	__u8 nv[16]; // next vector for aes-cbc
 	__u8 key[16]; // key for aes-cbc
@@ -231,7 +236,7 @@ static void 	*_rtp_control_thread(void *args);
 static void 	_raopcl_terminate_rtp(struct raopcl_s *p);
 static void 	_raopcl_send_sync(struct raopcl_s *p, bool first);
 static void 	_raopcl_set_timestamps(struct raopcl_s *p);
-static bool 	_raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, bool sleep);
+static bool 	_raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size);
 static __u32 	_raopcl_queued_frames(struct raopcl_s *p);
 
 // a few accessors
@@ -310,8 +315,9 @@ bool raopcl_is_connected(struct raopcl_s *p)
 /*----------------------------------------------------------------------------*/
 bool raopcl_is_sane(struct raopcl_s *p)
 {
-	if (p && p->state == RAOP_STREAMING && 
-		(!rtspcl_is_sane(p->rtspcl) || p->sane.audio >= 100 || 
+	if (p && p->state == RAOP_STREAMING &&
+		(!rtspcl_is_sane(p->rtspcl) ||
+		 (p->sane.audio.send + p->sane.audio.avail*5 +  p->sane.audio.select*50) >= 500 ||
 		 p->sane.ctrl > 2 || p->sane.time > 2)) return false;
 
 	return true;
@@ -504,7 +510,7 @@ __u32 raopcl_accept_frames(struct raopcl_s *p)
 			// unpausing ...
 			__u16 n, i;
 			/*
-			  if a multi_threaded application is stuck it the send() thread,
+			  if a multi_threaded application is stuck in the send() thread,
 			  then the pause_ts might be ahead of the head_ts and that would
 			  cause the loop below to be faulty and very long
 			*/
@@ -556,7 +562,7 @@ __u32 raopcl_accept_frames(struct raopcl_s *p)
 				p->backlog[reindex].size = p->backlog[index].size;
 				p->backlog[index].buffer = NULL;
 
-				_raopcl_send_audio(p, packet, p->backlog[reindex].size, false);
+				_raopcl_send_audio(p, packet, p->backlog[reindex].size);
 			}
 
 			LOG_DEBUG("[%p]: finished resend %u", p, i);
@@ -646,13 +652,16 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 
 	p->head_ts += p->chunk_len;
 
-	_raopcl_send_audio(p, packet, sizeof(rtp_audio_pkt_t) + size, true);
+	_raopcl_send_audio(p, packet, sizeof(rtp_audio_pkt_t) + size);
 
 	pthread_mutex_unlock(&p->mutex);
 
 	if (NTP2MS(*playtime) % 10000 < 8) {
-		LOG_INFO("check n:%u.%u p:%u.%u ts:%Lu sn:%u", SECNTP(now), SECNTP(*playtime),
-													   p->head_ts, p->seq_number);
+		LOG_INFO("[%p]: check n:%u p:%u ts:%Lu sn:%u\n                  "
+				  "retr: %u, avail: %u, send: %u, select: %u)", p,
+				 MSEC(now), MSEC(*playtime), p->head_ts, p->seq_number,
+				 p->retransmit, p->sane.audio.avail, p->sane.audio.send,
+				 p->sane.audio.select);
 	}
 
 	return true;
@@ -660,9 +669,9 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 
 
 /*----------------------------------------------------------------------------*/
-bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, bool sleep)
+bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 {
-	struct timeval timeout = { 0, 20*1000L };
+	struct timeval timeout;
 	fd_set wfds;
 	struct sockaddr_in addr;
 	size_t n;
@@ -678,32 +687,41 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, b
 	*/
 	if (p->rtp_ports.audio.fd == -1 || p->state != RAOP_STREAMING) return false;
 
-	addr.sin_family = AF_INET;
-	addr.sin_addr = p->host_addr;
+	addr.sin_family = AF_INET;
+	addr.sin_addr = p->host_addr;
 	addr.sin_port = htons(p->rtp_ports.audio.rport);
 
 	FD_ZERO(&wfds);
 	FD_SET(p->rtp_ports.audio.fd, &wfds);
 
-	if (select(p->rtp_ports.audio.fd + 1, NULL, &wfds, NULL, &timeout) == -1) {
+	/*
+	  The audio socket is non blocking, so we can can wait socket availability
+	  but not too much. Half of the packet size if a good value. There is the
+	  backlog buffer to re-send packets if needed, so nothign is lost
+	*/
+	timeout.tv_sec = 0;
+	timeout.tv_usec = (p->chunk_len * 1000000L) / (p->sample_rate * 2);
+
+	if (select(p->rtp_ports.audio.fd + 1, NULL, &wfds, NULL, &timeout) == -1) {
 		LOG_ERROR("[%p]: audio socket closed", p);
-		p->sane.audio++;
+		p->sane.audio.select++;
 	}
+	else p->sane.audio.select = 0;
 
 	if (FD_ISSET(p->rtp_ports.audio.fd, &wfds)) {
 		n = sendto(p->rtp_ports.audio.fd, (void*) packet, + size, 0, (void*) &addr, sizeof(addr));
 		if (n != size) {
-			LOG_ERROR("[%p]: error sending audio packet", p);
+			LOG_DEBUG("[%p]: error sending audio packet", p);
 			ret = false;
-			p->sane.audio++;
+			p->sane.audio.send++;
 		}
-		else p->sane.audio = 0;
-		if (sleep) usleep((p->chunk_len * 1000000LL) / (p->sample_rate * 2));
+		else p->sane.audio.send = 0;
+		p->sane.audio.avail = 0;
 	}
 	else {
-		LOG_ERROR("[%p]: audio socket unavailable", p);
+		LOG_DEBUG("[%p]: audio socket unavailable", p);
 		ret = false;
-		p->sane.audio++;
+		p->sane.audio.avail++;
 	}
 
 	return ret;
@@ -1004,7 +1022,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	VALGRIND_MAKE_MEM_DEFINED(&p->ssrc, sizeof(p->ssrc));
 
 	p->encrypt = (p->crypto != RAOP_CLEAR);
-	p->sane.audio = p->sane.ctrl = p->sane.time = 0;
+	memset(&p->sane, 0, sizeof(p->sane));
+	p->retransmit = 0;
 
 	RAND_bytes((__u8*) &seed, sizeof(seed));
 	VALGRIND_MAKE_MEM_DEFINED(&seed, sizeof(seed));
@@ -1061,7 +1080,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	// open RTP sockets, need local ports here before sending SETUP
 	p->rtp_ports.ctrl.lport = p->rtp_ports.audio.lport = 0;
 	if ((p->rtp_ports.ctrl.fd = open_udp_socket(p->local_addr, &p->rtp_ports.ctrl.lport, true)) == -1) goto erexit;
-	if ((p->rtp_ports.audio.fd = open_udp_socket(p->local_addr, &p->rtp_ports.audio.lport, true)) == -1) goto erexit;
+	if ((p->rtp_ports.audio.fd = open_udp_socket(p->local_addr, &p->rtp_ports.audio.lport, false)) == -1) goto erexit;
 
 	// RTSP SETUP : get all RTP destination ports
 	if (!rtspcl_setup(p->rtspcl, &p->rtp_ports, kd)) goto erexit;
@@ -1115,6 +1134,7 @@ bool raopcl_flush(struct raopcl_s *p)
 
 	pthread_mutex_lock(&p->mutex);
 	p->state = RAOP_FLUSHING;
+	p->retransmit = 0;
 	seq_number = p->seq_number;
 	timestamp = p->head_ts;
 	pthread_mutex_unlock(&p->mutex);
@@ -1385,17 +1405,17 @@ void *_rtp_control_thread(void *args)
 					addr.sin_family = AF_INET;
 					addr.sin_addr = raopcld->host_addr;
 					addr.sin_port = htons(raopcld->rtp_ports.ctrl.rport);
+
+					raopcld->retransmit++;
 
 					n = sendto(raopcld->rtp_ports.ctrl.fd, (void*) hdr,
 							   sizeof(rtp_header_t) + raopcld->backlog[index].size,
 							   0, (void*) &addr, sizeof(addr));
 
 					if (n == -1) {
-						raopcld->sane.audio++;
-						LOG_INFO("[%p]: error resending lost packet sn:%u (n:%d)",
+						LOG_WARN("[%p]: error resending lost packet sn:%u (n:%d)",
 								   raopcld, lost.seq_number + i, n);
 					}
-					else raopcld->sane.audio = 0;
 				}
 				else {
 					LOG_WARN("[%p]: lost packet out of backlog %u", raopcld, lost.seq_number + i);
@@ -1404,7 +1424,7 @@ void *_rtp_control_thread(void *args)
 
 			pthread_mutex_unlock(&raopcld->mutex);
 
-			LOG_INFO("[%p]: retransmit packet sn:%d nb:%d (mis:%d) (err:%d)",
+			LOG_DEBUG("[%p]: retransmit packet sn:%d nb:%d (mis:%d) (err:%d)",
 					  raopcld, lost.seq_number, lost.n, missed);
 
 			continue;
