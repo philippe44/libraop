@@ -458,8 +458,15 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	char *token,*dp;
 	int i,j, rval, len;
 	int timeout = 10000; // msec unit
+	struct pollfd pfds;
 
 	if(!rtspcld || rtspcld->fd == -1) return false;
+
+	pfds.fd = rtspcld->fd;
+	pfds.events = POLLOUT;
+
+	i = poll(&pfds, 1, 0);
+	if (i == -1 || (pfds.revents & POLLERR) || (pfds.revents & POLLHUP)) return false;
 
 	if ((req = malloc(4096+length)) == NULL) return false;
 

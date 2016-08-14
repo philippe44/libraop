@@ -657,7 +657,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 	pthread_mutex_unlock(&p->mutex);
 
 	if (NTP2MS(*playtime) % 10000 < 8) {
-		LOG_INFO("[%p]: check n:%u p:%u ts:%Lu sn:%u\n                  "
+		LOG_INFO("[%p]: check n:%u p:%u ts:%Lu sn:%u\n               "
 				  "retr: %u, avail: %u, send: %u, select: %u)", p,
 				 MSEC(now), MSEC(*playtime), p->head_ts, p->seq_number,
 				 p->retransmit, p->sane.audio.avail, p->sane.audio.send,
@@ -989,12 +989,6 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_reconnect(struct raopcl_s *p) {
-   return raopcl_connect(p, p->host_addr, p->rtsp_port, p->codec);
-}
-
-
-/*----------------------------------------------------------------------------*/
 bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec)
 {
 	struct {
@@ -1163,11 +1157,36 @@ bool raopcl_disconnect(struct raopcl_s *p)
 	p->state = RAOP_DOWN;
 	pthread_mutex_unlock(&p->mutex);
 
-	_raopcl_terminate_rtp(p);	
+	_raopcl_terminate_rtp(p);
 	
 	rc = rtspcl_flush(p->rtspcl, p->seq_number + 1, p->head_ts + 1);
 	rc &= rtspcl_disconnect(p->rtspcl);
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
+
+	return rc;
+}
+
+
+/*----------------------------------------------------------------------------*/
+bool raopcl_repair(struct raopcl_s *p)
+{
+	bool rc = true;
+
+	if (!p) return false;
+
+	pthread_mutex_lock(&p->mutex);
+	p->state = RAOP_DOWN;
+	pthread_mutex_unlock(&p->mutex);
+
+	_raopcl_terminate_rtp(p);
+
+	// not thread safe, but does not matter really, all we want is "some" flush
+	rc &= rtspcl_flush(p->rtspcl, p->seq_number + 1, p->head_ts + 1);
+	rc &= rtspcl_disconnect(p->rtspcl);
+	rc &= rtspcl_remove_all_exthds(p->rtspcl);
+
+	// this will put us again in FLUSHED state
+	rc &= raopcl_connect(p, p->host_addr, p->rtsp_port, p->codec);
 
 	return rc;
 }

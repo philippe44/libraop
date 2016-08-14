@@ -164,7 +164,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 // Functions thread category A
 bool	raopcl_destroy(struct raopcl_s *p);
 bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
-bool 	raopcl_reconnect(struct raopcl_s *p);
+bool 	raopcl_repair(struct raopcl_s *p);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
 
