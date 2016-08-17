@@ -156,10 +156,11 @@ typedef struct {
 } __attribute__ ((packed)) rtp_audio_pkt_t;
 #endif
 
+// if volume < -30 and not -144 or volume > 0, then not "initial set volume" will be done
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int frame_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
-							   int sample_rate, int sample_size, int channels, int volume);
+							   int sample_rate, int sample_size, int channels, float volume);
 
 // Functions thread category A
 bool	raopcl_destroy(struct raopcl_s *p);
@@ -171,7 +172,8 @@ bool    raopcl_flush(struct raopcl_s *p);
 // Functions thread category B
 bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);
 bool 	raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration);
-bool 	raopcl_set_volume(struct raopcl_s *p, int vol, bool force);
+bool 	raopcl_set_volume(struct raopcl_s *p, float vol);
+float 	raopcl_float_volume(int vol);
 bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
 bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
 

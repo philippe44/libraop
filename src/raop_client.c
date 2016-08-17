@@ -207,7 +207,7 @@ typedef struct raopcl_s {
 		u8_t *buffer;
 	} backlog[MAX_BACKLOG];
 	// int ajstatus, ajtype;
-	int volume;
+	float volume;
 	aes_context ctx;
 	int size_in_aex;
 	bool encrypt;
@@ -732,7 +732,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int chunk_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
-							   int sample_rate, int sample_size, int channels, int volume)
+							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
 
@@ -805,24 +805,30 @@ static void _raopcl_terminate_rtp(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-// minimum=0, maximum=100
-bool raopcl_set_volume(struct raopcl_s *p, int vol, bool force)
+bool raopcl_set_volume(struct raopcl_s *p, float vol)
 {
 	char a[128];
 
-	if (!p || !p->rtspcl || p->state < RAOP_FLUSHED) return false;
-
-	if (!force && vol == p->volume) return true;
+	if (!p) return false;
 
 	p->volume = vol;
 
-	if (vol == 0) vol = -144.0;
-	else vol = VOLUME_MIN + ((VOLUME_MAX - VOLUME_MIN) * vol) / 100;
+	if (!p->rtspcl || p->state < RAOP_FLUSHED) return true;
 
-	sprintf(a, "volume: %d.0\r\n", vol);
+	sprintf(a, "volume: %f\r\n", vol);
 
 	return rtspcl_set_parameter(p->rtspcl, a);
 }
+
+
+/*----------------------------------------------------------------------------*/
+// minimum=0, maximum=100
+float raopcl_float_volume(int vol)
+{
+	if (vol == 0) return -144.0;
+	return VOLUME_MIN + ((VOLUME_MAX - VOLUME_MIN) * (float) vol) / 100;
+}
+
 
 
 /*----------------------------------------------------------------------------*/
@@ -1103,7 +1109,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	if (p->state == RAOP_DOWN) p->state = RAOP_FLUSHED;
 	pthread_mutex_unlock(&p->mutex);
 
-	if (!raopcl_set_volume(p, p->volume, true)) goto erexit;
+	if (((p->volume >= -30 && p->volume <= 0) || p->volume == -144.0) && !raopcl_set_volume(p, p->volume)) goto erexit;
 
 	if (sac) free(sac);
 	return true;
