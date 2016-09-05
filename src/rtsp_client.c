@@ -456,7 +456,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	char buf[128];
 	const char delimiters[] = " ";
 	char *token,*dp;
-	int i,j, rval, len;
+	int i,j, rval, len, clen;
 	int timeout = 10000; // msec unit
 	struct pollfd pfds;
 
@@ -540,6 +540,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	}
 
 	i = 0;
+	clen = 0;
 	if (rkd) rkd[0].key = NULL;
 
 	while (read_line(rtspcld->fd, line, sizeof(line), timeout, 0) > 0) {
@@ -565,7 +566,28 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 		*dp = 0;
 		rkd[i].key = strdup(line);
 		rkd[i].data = strdup(dp + 1);
+
+		if (!strcasecmp(rkd[i].key, "Content-Length")) clen = atol(rkd[i].data);
+
 		i++;
+	}
+
+	if (clen) {
+		char *data = malloc(clen);
+		int size = 0;
+
+		while (data && size < clen) {
+			int bytes = recv(rtspcld->fd, data + size, clen - size, 0);
+			if (bytes <= 0) break;
+			size += bytes;
+		}
+
+		if (!data || size != clen) {
+			LOG_ERROR("[%p]: content length receive error %p %d", rtspcld, data, size);
+		}
+
+		LOG_INFO("[%p]: Body data %d, %s", rtspcld, clen, data);
+		free(data);
 	}
 
 	if (rkd) rkd[i].key = NULL;

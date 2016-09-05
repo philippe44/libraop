@@ -1449,7 +1449,7 @@ void *_rtp_control_thread(void *args)
 
 			pthread_mutex_unlock(&raopcld->mutex);
 
-			LOG_DEBUG("[%p]: retransmit packet sn:%d nb:%d (mis:%d) (err:%d)",
+			LOG_DEBUG("[%p]: retransmit packet sn:%d nb:%d (mis:%d)",
 					  raopcld, lost.seq_number, lost.n, missed);
 
 			continue;
