@@ -31,7 +31,7 @@ bin:
 	@mkdir -p bin
 
 $(OBJ)/%.o : %.c
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -c -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
 	
 clean:
 	rm -f $(OBJECTS) $(EXECUTABLE) 
