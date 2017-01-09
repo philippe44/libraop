@@ -1,5 +1,5 @@
 CFLAGS  ?= -Wall -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES)
-LDFLAGS ?= -lpthread -lcrypto -ldl -lm -lrt -lz -L. 
+LDFLAGS ?= -s -lpthread -lcrypto -ldl -lm -lrt -L. 
 
 OBJ			= bin/x86
 EXECUTABLE 	= bin/raop_play-x86
