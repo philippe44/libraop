@@ -30,11 +30,11 @@ raop_play <options> <server_ip> <filename ('-' for stdin)>"
 	
 It's possible to send synchronous audio to multiple players by using the NTP options (optionally combined with the wait option).
 Either get the NTP of the master machine from any application and then fork multiple instances of raop_play with that NTP and
-the same file, or use the -ntp option to get NTP to be written to a file and re-use that file when calling the instances of 
+the same audio file, or use the -ntp option to get NTP to be written to a file and re-use that file when calling the instances of 
 raop_play
 
 Makesfiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile
 
 You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32)
 
-It's largely inspired from https://github.com/chevil/raop2_play but limit the playback to pcm as it focuse on creating a library and optimizing AirPlay synchronization 
+It's largely inspired from https://github.com/chevil/raop2_play but limit the playback to pcm as it focuses on creating a library and optimizing AirPlay synchronization 
