@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
 
 	init_platform(interactive);
 
-	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, MAX_SAMPLES_PER_CHUNK,
+	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, true, MAX_SAMPLES_PER_CHUNK,
 								queue, latency, crypto, 44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);
@@ -376,9 +376,7 @@ int main(int argc, char *argv[]) {
 	buf = malloc(MAX_SAMPLES_PER_CHUNK*4);
 
 	do {
-		__u8 *buffer;
 		__u64 playtime, now;
-		int size;
 
 		now = get_ntp(NULL);
 
@@ -395,11 +393,8 @@ int main(int argc, char *argv[]) {
 		if (status == PLAYING && raopcl_accept_frames(raopcl) >= MAX_SAMPLES_PER_CHUNK) {
 			n = read(infile, buf, MAX_SAMPLES_PER_CHUNK*4);
 			if (!n)	continue;
-			pcm_to_alac_fast((__u32*) buf, MAX_SAMPLES_PER_CHUNK, &buffer, &size,
-							 MAX_SAMPLES_PER_CHUNK);
-			raopcl_send_chunk(raopcl, buffer, size, &playtime);
+			raopcl_send_chunk(raopcl, buf, MAX_SAMPLES_PER_CHUNK, &playtime);
 			frames += MAX_SAMPLES_PER_CHUNK;
-			free(buffer);
 		}
 
 		if (interactive && kbhit()) {

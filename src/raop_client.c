@@ -32,6 +32,7 @@
 #include <stdlib.h>
 
 #include <limits.h>
+#include "alac_wrapper.h"
 #include "aexcl_lib.h"
 #include "rtsp_client.h"
 #include "raop_client.h"
@@ -224,6 +225,7 @@ typedef struct raopcl_s {
 	bool time_running, ctrl_running;
 	int sample_rate, sample_size, channels;
 	raop_codec_t codec;
+	struct alac_codec_s *alac_codec;
 	raop_crypto_t crypto;
 } raopcl_data_t;
 
@@ -238,6 +240,7 @@ static void 	_raopcl_send_sync(struct raopcl_s *p, bool first);
 static void 	_raopcl_set_timestamps(struct raopcl_s *p);
 static bool 	_raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size);
 static __u32 	_raopcl_queued_frames(struct raopcl_s *p);
+static bool 	_raopcl_disconnect(struct raopcl_s *p, bool force);
 
 // a few accessors
 /*----------------------------------------------------------------------------*/
@@ -597,16 +600,16 @@ void _raopcl_set_timestamps(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime)
+bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int frames, __u64 *playtime)
 {
-	u8_t *buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size);
+	u8_t *encoded, *buffer;
 	rtp_audio_pkt_t *packet;
 	size_t n;
+	int size;
 	__u64 now = get_ntp(NULL);
 
-	if (!p || !sample || !buffer) {
-		if (buffer) free(buffer);
-		LOG_ERROR("[%p]: something went wrong (s:%p) (b:%p)",p, sample, buffer);
+	if (!p || !sample) {
+		LOG_ERROR("[%p]: something went wrong (s:%p)", p, sample);
 		return false;
 	}
 
@@ -620,6 +623,16 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 		_raopcl_send_sync(p, true);
 	}
 
+	if (p->alac_codec) pcm_to_alac(p->alac_codec, sample, frames, &encoded, &size);
+	else pcm_to_alac_fast(sample, frames, &encoded, &size, p->chunk_len);
+
+	if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
+		pthread_mutex_unlock(&p->mutex);
+		if (encoded) free(encoded);
+		LOG_ERROR("[%p]: cannot allocate buffer",p);
+		return false;
+	}
+
 	*playtime = TS2NTP(p->head_ts - p->offset_ts + raopcl_latency(p), p->sample_rate);
 
 	LOG_SDEBUG("[%p]: sending audio ts:%Lu (pt:%u.%u now:%Lu) ", p, p->head_ts, SEC(*playtime), FRAC(*playtime), get_ntp(NULL));
@@ -630,15 +643,13 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 	packet = (rtp_audio_pkt_t *) (buffer + sizeof(rtp_header_t));
 	packet->hdr.proto = 0x80;
 	packet->hdr.type = 0x60 | (p->first_pkt ? 0x80 : 0);
-	// packet->hdr.type = 0x0a | (first ? 0x80 : 0);
 	p->first_pkt = false;
 	packet->hdr.seq[0] = (p->seq_number >> 8) & 0xff;
 	packet->hdr.seq[1] = p->seq_number & 0xff;
 	packet->timestamp = htonl(p->head_ts);
-	//packet->timestamp = htonl(p->head_ts);
 	packet->ssrc = htonl(p->ssrc);
 
-	memcpy((u8_t*) packet + sizeof(rtp_audio_pkt_t), sample, size);
+	memcpy((u8_t*) packet + sizeof(rtp_audio_pkt_t), encoded, size);
 
 	// with newer airport express, don't use encryption (??)
 	if (p->encrypt) raopcl_encrypt(p, (u8_t*) packet + sizeof(rtp_audio_pkt_t), size);
@@ -663,6 +674,8 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playti
 				 p->retransmit, p->sane.audio.avail, p->sane.audio.send,
 				 p->sane.audio.select);
 	}
+
+	if (encoded) free(encoded);
 
 	return true;
 }
@@ -730,7 +743,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 
 /*----------------------------------------------------------------------------*/
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
-							   raop_codec_t codec, int chunk_len, int queue_len,
+							   raop_codec_t codec, bool alac_encode, int chunk_len, int queue_len,
 							   int latency_frames, raop_crypto_t crypto,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
@@ -747,7 +760,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	memset(raopcld, 0, sizeof(raopcl_data_t));
 
 	//  raopcld->sane is set to 0
-	
+
 	raopcld->sample_rate = sample_rate;
 	raopcld->sample_size = sample_size;
 	raopcld->channels = channels;
@@ -769,6 +782,12 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 		free(raopcld);
 		return NULL;
 	}
+
+	if (alac_encode && (raopcld->alac_codec = alac_create_codec(raopcld->chunk_len, sample_rate, sample_size, channels)) == NULL) {
+		LOG_WARN("[%p]: cannot create ALAC codec", raopcld);
+	}
+
+	LOG_INFO("[%p]: using %s coding", raopcld, raopcld->alac_codec ? "ALAC" : "PCM");
 
 	pthread_mutex_init(&raopcld->mutex, NULL);
 
@@ -1093,7 +1112,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 
 	if (!rtspcl_record(p->rtspcl, p->seq_number, NTP2TS(get_ntp(NULL) - p->queue_len,
 					   p->sample_rate), kd)) goto erexit;
-					   
+
 	if (kd_lookup(kd, "Audio-Latency")) {
 		int latency = atoi(kd_lookup(kd, "Audio-Latency"));
 
@@ -1117,7 +1136,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
  erexit:
 	if (sac) free(sac);
 	free_kd(kd);
-	raopcl_disconnect(p);
+	_raopcl_disconnect(p, true);
 
 	return false;
 }
@@ -1153,11 +1172,11 @@ bool raopcl_flush(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_disconnect(struct raopcl_s *p)
+bool _raopcl_disconnect(struct raopcl_s *p, bool force)
 {
 	bool rc = true;
 
-	if (!p || p->state == RAOP_DOWN) return true;
+	if (!force && (!p || p->state == RAOP_DOWN)) return true;
 
 	pthread_mutex_lock(&p->mutex);
 	p->state = RAOP_DOWN;
@@ -1170,6 +1189,13 @@ bool raopcl_disconnect(struct raopcl_s *p)
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
 
 	return rc;
+}
+
+
+/*----------------------------------------------------------------------------*/
+bool raopcl_disconnect(struct raopcl_s *p) 
+{
+	return _raopcl_disconnect(p, false);
 }
 
 
@@ -1215,6 +1241,8 @@ bool raopcl_destroy(struct raopcl_s *p)
 			free(p->backlog[i].buffer);
 		}
 	}
+
+	if (p->alac_codec) alac_destroy_codec(p->alac_codec);
 
 	free(p);
 

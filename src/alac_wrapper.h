@@ -20,7 +20,18 @@
 #ifndef __ALAC_WRAPPER_H_
 #define __ALAC_WRAPPER_H_
 
-bool pcm_to_alac(u8_t *in, int in_size, u8_t **out, int *size, int bsize, int channels, bool big_endian);
-bool pcm_to_alac_fast(__u32 *in, int in_size, __u8 **out, int *size, int bsize);
+struct alac_codec_s;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool pcm_to_alac(struct alac_codec_s *codec, __u8 *in, int frames, __u8 **out, int *size);
+bool pcm_to_alac_fast(__u8 *in, int frames, __u8 **out, int *size, int bsize);
+struct alac_codec_s *alac_create_codec(int chunk_len, int sampleRate, int sampleSize, int channels);
+void alac_destroy_codec(struct alac_codec_s *codec);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

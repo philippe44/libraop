@@ -64,9 +64,6 @@
 #include <errno.h>
 #include <memcheck.h>
 
-#define min(a,b) (((a) < (b)) ? (a) : (b))
-#define max(a,b) (((a) > (b)) ? (a) : (b))
-
 typedef u_int8_t  u8_t;
 typedef u_int16_t u16_t;
 typedef u_int32_t u32_t;
@@ -144,4 +141,7 @@ typedef struct ntp_s {
 u32_t gettime_ms(void);
 u64_t gettime_ms64(void);
 
-#endif     // __PLATFORM
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+
+#endif     // __PLATFORM
