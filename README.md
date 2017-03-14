@@ -35,6 +35,7 @@ raop_play
 
 Makesfiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile
 
-You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32)
+You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32
+ALAC codec is also needed from here: https://github.com/macosforge/alac
 
 It's largely inspired from https://github.com/chevil/raop2_play but limit the playback to pcm as it focuses on creating a library and optimizing AirPlay synchronization 
