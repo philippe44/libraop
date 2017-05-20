@@ -159,7 +159,7 @@ typedef struct {
 // if volume < -30 and not -144 or volume > 0, then not "initial set volume" will be done
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int frame_len, int queue_len,
-							   int latency_frames, raop_crypto_t crypto,
+							   int latency_frames, raop_crypto_t crypto, bool auth,
 							   int sample_rate, int sample_size, int channels, float volume);
 
 // Functions thread category A

@@ -227,6 +227,7 @@ typedef struct raopcl_s {
 	raop_codec_t codec;
 	struct alac_codec_s *alac_codec;
 	raop_crypto_t crypto;
+	bool auth;
 } raopcl_data_t;
 
 
@@ -494,6 +495,7 @@ __u32 raopcl_accept_frames(struct raopcl_s *p)
 		// move to streaming only when really flushed - not when timedout
 		if (p->state == RAOP_FLUSHED) {
 			first_pkt = true;
+			p->first_pkt = true;
 			LOG_INFO("[%p]: begining to stream hts:%Lu (ofs:%Lu) n:%u.%u", p, p->head_ts, p->offset_ts, SECNTP(now));
 			p->state = RAOP_STREAMING;
 		}
@@ -615,7 +617,11 @@ bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int frames, __u64 *play
 
 	pthread_mutex_lock(&p->mutex);
 
-	// move to streaming only when really flushed - not when timedout
+	/*
+	 Move to streaming state only when really flushed. In most cases, this is
+	 done by the raopcl_accept_frames function, except when a player takes too
+	 long to flush (JBL OnBeat) and we have to "fake" accepting frames
+	*/
 	if (p->state == RAOP_FLUSHED) {
 		p->first_pkt = true;
 		LOG_INFO("[%p]: begining to stream in chunk hts:%Lu (ofs:%Lu) n:%u.%u", p, p->head_ts, p->offset_ts, SECNTP(now));
@@ -744,13 +750,13 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 /*----------------------------------------------------------------------------*/
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int chunk_len, int queue_len,
-							   int latency_frames, raop_crypto_t crypto,
+							   int latency_frames, raop_crypto_t crypto, bool auth,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
 
 	if (chunk_len > MAX_SAMPLES_PER_CHUNK) {
-		LOG_ERROR("Chunk length must below ", MAX_SAMPLES_PER_CHUNK);
+		LOG_ERROR("Chunk length must below %d", MAX_SAMPLES_PER_CHUNK);
 		return NULL;
 	}
 
@@ -767,6 +773,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	raopcld->volume = volume;
 	raopcld->codec = codec;
 	raopcld->crypto = crypto;
+	raopcld->auth = auth;
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
 	raopcld->chunk_len = chunk_len;
 	raopcld->queue_len = queue_len;
@@ -1085,7 +1092,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	pthread_create(&p->time_thread, NULL, _rtp_timing_thread, (void*) p);
 
 	// RTSP ANNOUNCE
-	if (p->crypto) {
+	if (p->auth && p->crypto) {
 		base64_encode(&seed.sac, 16, &sac);
 		remove_char_from_string(sac, '=');
 		if (!rtspcl_add_exthds(p->rtspcl, "Apple-Challenge", sac)) goto erexit;
@@ -1110,7 +1117,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	LOG_DEBUG( "[%p]:opened timing socket  l:%5d r:%d", p, p->rtp_ports.time.lport, p->rtp_ports.time.rport );
 	LOG_DEBUG( "[%p]:opened control socket l:%5d r:%d", p, p->rtp_ports.ctrl.lport, p->rtp_ports.ctrl.rport );
 
-	if (!rtspcl_record(p->rtspcl, p->seq_number, NTP2TS(get_ntp(NULL) - p->queue_len,
+	if (!rtspcl_record(p->rtspcl, p->seq_number + 1, NTP2TS(get_ntp(NULL) - p->queue_len,
 					   p->sample_rate), kd)) goto erexit;
 
 	if (kd_lookup(kd, "Audio-Latency")) {
@@ -1292,7 +1299,10 @@ void _raopcl_send_sync(struct raopcl_s *raopcld, bool first)
 	if (!first) pthread_mutex_lock(&raopcld->mutex);
 
 	// set the NTP time in network order
-	now = get_ntp(NULL);
+	//now = get_ntp(NULL);
+	timestamp = raopcld->head_ts;
+	now = TS2NTP(timestamp, raopcld->sample_rate);
+
 	rsp.curr_time.seconds = htonl(now >> 32);
 	rsp.curr_time.fraction = htonl(now);
 
@@ -1301,7 +1311,7 @@ void _raopcl_send_sync(struct raopcl_s *raopcld, bool first)
 	 timestamp_latency value sets the minimum acceptable timestamp. Everything
 	 below will be discarded and everything above will play at the set timestamp
 	*/
-	timestamp = NTP2TS(now, raopcld->sample_rate) + raopcld->offset_ts;
+	//timestamp = NTP2TS(now, raopcld->sample_rate) + raopcld->offset_ts;
 	rsp.rtp_timestamp = htonl(timestamp);
 	rsp.rtp_timestamp_latency = htonl(timestamp - raopcld->latency_frames);
 
@@ -1377,7 +1387,7 @@ void *_rtp_timing_thread(void *args)
 			   LOG_ERROR("[%p]: error responding to sync", raopcld);
 			}
 
-			LOG_DEBUG( "[%p]: NTP sync: %u.%u (ref %u.%u)", raopcld, rsp.send_time.seconds, rsp.send_time.fraction,
+			LOG_DEBUG( "[%p]: NTP sync: %u.%u (ref %u.%u)", raopcld, ntohl(rsp.send_time.seconds), ntohl(rsp.send_time.fraction),
 															ntohl(rsp.ref_time.seconds), ntohl(rsp.ref_time.fraction) );
 
 		}

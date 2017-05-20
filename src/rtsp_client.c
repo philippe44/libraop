@@ -356,7 +356,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list arg
 		__u32 size;
 
 		fmt = va_arg(args, char*);
-		type = va_arg(args, int);
+		type = (char) va_arg(args, int);
 		q = (char*) memcpy(q, fmt, 4) + 4;
 
 		switch(type) {
@@ -372,7 +372,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list arg
 			case 'i': {
 				int data;
 				data = va_arg(args, int);
-				*q++ = 0; *q++ = 2;
+				for (i = 0; i < 3; i++) *q++ = 0; *q++ = 2;
 				*q++ = (data >> 8); *q++ = data;
 				break;
 			}
