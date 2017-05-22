@@ -76,13 +76,13 @@ static int print_usage(char *argv[])
 			   "\t[-ntp <file>] write current NTP in <file> and exit\n"
 			   "\t[-p <port number>]\n"
 			   "\t[-v <volume> (0-100)]\n"
-			   "\t[-l <latency> (frames] [-q <queue>(frames)]\n"
+			   "\t[-l <latency> (frames]\n"
 			   "\t[-w <wait>]  (start after <wait> milliseconds)\n"
 			   "\t[-n <start>] (start at NTP <start> + <wait>)\n"
 			   "\t[-nf <start>] (start at NTP in <file> + <wait>)\n"
 			   "\t[-e (encrypt)]\n"
 			   "\t[-d <debug level>] (0 = silent)\n"
-			   "\t[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit)\n",
+			   "\t[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n",
 			   name);
 	return -1;
 }
@@ -226,7 +226,7 @@ int main(int argc, char *argv[]) {
 	struct raopcl_s *raopcl;
 	char *fname = NULL;
 	int port = 5000;
-	int volume = 50, wait = 0, latency = 11025, queue = MS2TS(1000, 44100);
+	int volume = 50, wait = 0, latency = MS2TS(1000, 44100);
 	struct {
 		struct hostent *hostent;
 		char *name;
@@ -265,10 +265,6 @@ int main(int argc, char *argv[]) {
 		}
 		if(!strcmp(argv[i],"-l")){
 			latency=atoi(argv[++i]);
-			continue;
-		}
-		if(!strcmp(argv[i],"-q")){
-			queue=atoi(argv[++i]);
 			continue;
 		}
 		if(!strcmp(argv[i],"-i")){
@@ -332,7 +328,7 @@ int main(int argc, char *argv[]) {
 	init_platform(interactive);
 
 	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, true, MAX_SAMPLES_PER_CHUNK,
-								queue, latency, crypto, false, 44100, 16, 2,
+								latency, crypto, false, 44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);
 		close_platform(interactive);
@@ -382,15 +378,14 @@ int main(int argc, char *argv[]) {
 
 		if (now - last > MS2NTP(1000)) {
 			last = now;
-			if (frames && frames > raopcl_queued_frames(raopcl) + latency) {
+			if (frames && frames > raopcl_latency(raopcl)) {
 				LOG_INFO("at %u.%u (%Lu ms after start), played %Lu ms",
 						  SECNTP(now), NTP2MS(now - start),
-						  TS2MS(frames - raopcl_queued_frames(raopcl) - latency,
-								raopcl_sample_rate(raopcl)));
+						  TS2MS(frames - raopcl_latency(raopcl), raopcl_sample_rate(raopcl)));
 			}
 		}
 
-		if (status == PLAYING && raopcl_accept_frames(raopcl) >= MAX_SAMPLES_PER_CHUNK) {
+		if (status == PLAYING && raopcl_accept_frames(raopcl)) {
 			n = read(infile, buf, MAX_SAMPLES_PER_CHUNK*4);
 			if (!n)	continue;
 			raopcl_send_chunk(raopcl, buf, MAX_SAMPLES_PER_CHUNK, &playtime);
@@ -430,11 +425,14 @@ int main(int argc, char *argv[]) {
 				free(buf);
 				close_platform(interactive);
 				exit(0);
+			case ' ':
+				_getch();
+				break;
 			default: break;
 			}
 		}
 
-	} while (n || raopcl_queued_frames(raopcl));
+	} while (n || raopcl_is_playing(raopcl));
 
 	raopcl_disconnect(raopcl);
 	raopcl_destroy(raopcl);

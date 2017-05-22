@@ -23,7 +23,9 @@
 #define __RAOP_CLIENT_H_
 
 /*--------------- SYNCHRO logic explanation ----------------*/
-/* The logic is that, using one user-provided function
+
+/*
+ The logic is that, using one user-provided function
  - get_ntp(struct ntp_t *) returns a NTP time as a flat 64 bits value and in the
  structure passed (if NULL, just return the value)
 
@@ -40,55 +42,32 @@
  setting a start time, we must anticipate by the latency if we want the first
  frame to be *exactly* played at that NTP value.
 
- The player also have a queue to absord network jitter (this has nothing to do
- with the latency). The function raopcl_avail_frames() return the amount of free
- frames in the buffer.
-
  There are two ways to calculate the duration of what has been played
  1- Based on time: if pause has never been made, simply make the difference
  between the NTP start time and the current NTP time, minus the latency (in NTP)
  2- Based on sent frames: this is the only reliable method if pause has been
- used ==> substracts raopcl_queue_len() and raopcl_latency() to the number of
- frames. Any other method based on taking local time at pause and substracting
- local paused tme is not as accurate.
+ used ==> substract raopcl_latency() to the number of frames. Any other method
+ based on taking local time at pause and substracting local paused tme is not as
+ accurate.
+ */
 
+ /*--------------- USAGE ----------------*/
 
- // to be revised
-
-
-  With that, the user app can be sure that when it wants to
- play/do something at its local gettime_ms(), the player will do it at the exact
- same time plus the latency. Both references and synchronous. The desired latency
- is set when creating the player using raoplc_create(). When connecting, players
- return their minimum latency so the real value might be above the desired value
- Use raop_get_latency() to retrieve the used one.
-
- Because it's needed to send data in advance (buffering), the user app shall use
- raopcl_avail_frames and raopcl_queue_len() to evaluate the empty/fullness of
- the buffer, not try to guess it (see why below)
-
- Send frames by calling raopcl_send_chunk() after having encoded them in ALAC
- using pcm_to_alac()
-
- To know, in gettime() reference, how long of the current song has been played
- count the frames sent to the player since the last flush, substract what's in
- the queue using raopl_queue_len() and then substract the latency
-
- Continue sending frames whenever raopcl_avail_frames() does not return 0. When
- 0 is return, wait (sleep) a bit before trying again (sleeping is better to save
- CPU, although it's not mandatory, just don't call raopcl_send_chunk() when
- there is no space)
+ /*
+ To play, call raopcl_accept_frames. When true is return, one frame can be sent,
+ so just use raopcl_send_chunk - ONE AT A TIME. The pacing is handled by the
+ calls to raopcl_accept_frames. To send in burst, send at least raopcl_latency
+ frames, sleep a while and then do as before
 
  To start at a precise time, just use raopcl_set_start() after having flushed
- the player and give the desired start time in local gettime() time. The latency
- will be substracted from that time to make sure the player starts exactly when
- required. Then do as usual using raopcl_avail_frames() and raoplc_send_chunk()
- to send frames and evaluate queue fullness. Note that until the first call to
- raopcl_send_chunk(), queue will always appear to be full
+ the player and give the desired start time in local gettime() time, minus
+ latency.
 
- To pause call raopcl_pause_mode(), flush the player and stop sending data. Play
- will resume as soon as a call to raopcl_send_chunk() is made (unless a specific
- start time has been set). It is not possible to pause at a given time
+ To pause, stop calling raopcl_accept_frames, call raopcl_pause_mode() and flush
+ the player.
+
+ To resume, optionally call raopcl_set_start to restart at a given time or just
+ start calling raopcl_accept_frames and send raopcl_send_chunk
 */
 
 #include "platform.h"
@@ -158,7 +137,7 @@ typedef struct {
 
 // if volume < -30 and not -144 or volume > 0, then not "initial set volume" will be done
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
-							   raop_codec_t codec, bool alac_encode, int frame_len, int queue_len,
+							   raop_codec_t codec, bool alac_encode, int frame_len,
 							   int latency_frames, raop_crypto_t crypto, bool auth,
 							   int sample_rate, int sample_size, int channels, float volume);
 
@@ -178,7 +157,7 @@ bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
 bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
 
 // Functions thread category C
-__u32 	raopcl_accept_frames(struct raopcl_s *p);
+bool 	raopcl_accept_frames(struct raopcl_s *p);
 bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
 
 // Functions thread category D
@@ -198,6 +177,7 @@ __u32 	raopcl_queued_frames(struct raopcl_s *p);
 
 bool 	raopcl_is_sane(struct raopcl_s *p);
 bool 	raopcl_is_connected(struct raopcl_s *p);
+bool 	raopcl_is_playing(struct raopcl_s *p);
 bool 	raopcl_sanitize(struct raopcl_s *p);
 
 __u64 	raopcl_time32_to_ntp(__u32 time);

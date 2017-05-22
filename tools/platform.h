@@ -143,5 +143,4 @@ u64_t gettime_ms64(void);
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #define max(a,b) (((a) > (b)) ? (a) : (b))
-
-#endif     // __PLATFORM
+#endif     // __PLATFORM
