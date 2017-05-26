@@ -994,8 +994,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 
 	// RTSP misc setup
 	rtspcl_add_exthds(p->rtspcl,"Client-Instance", sci);
-	if (*p->active_remote) rtspcl_add_exthds(p->rtspcl,"Active-Remote", p->active_remote);
 	if (*p->DACP_id) rtspcl_add_exthds(p->rtspcl,"DACP-ID", p->DACP_id);
+	if (*p->active_remote) rtspcl_add_exthds(p->rtspcl,"Active-Remote", p->active_remote);
 
 	// RTSP connect
 	if (!rtspcl_connect(p->rtspcl, p->local_addr, host, destport, sid)) goto erexit;
