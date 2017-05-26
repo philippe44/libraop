@@ -46,9 +46,9 @@
  1- Based on time: if pause has never been made, simply make the difference
  between the NTP start time and the current NTP time, minus the latency (in NTP)
  2- Based on sent frames: this is the only reliable method if pause has been
- used ==> substract raopcl_latency() to the number of frames. Any other method
- based on taking local time at pause and substracting local paused tme is not as
- accurate.
+ used ==> substract raopcl_latency() to the number of frames sent . Any other
+ method based on taking local time at pause and substracting local paused tme is
+ not as accurate.
  */
 
  /*--------------- USAGE ----------------*/
@@ -63,8 +63,9 @@
  the player and give the desired start time in local gettime() time, minus
  latency.
 
- To pause, stop calling raopcl_accept_frames, call raopcl_pause_mode() and flush
- the player.
+ To pause, stop calling raopcl_accept_frames and raopcl_send_chunk (obviously),
+ call raopcl_flush with true. To stop, just do the same an call raopcl_flush
+ with false;
 
  To resume, optionally call raopcl_set_start to restart at a given time or just
  start calling raopcl_accept_frames and send raopcl_send_chunk
@@ -141,14 +142,12 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 							   int latency_frames, raop_crypto_t crypto, bool auth,
 							   int sample_rate, int sample_size, int channels, float volume);
 
-// Functions thread category A
 bool	raopcl_destroy(struct raopcl_s *p);
 bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
 bool 	raopcl_repair(struct raopcl_s *p);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p, bool pause);
 
-// Functions thread category B
 bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);
 bool 	raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration);
 bool 	raopcl_set_volume(struct raopcl_s *p, float vol);
@@ -156,14 +155,10 @@ float 	raopcl_float_volume(int vol);
 bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
 bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
 
-// Functions thread category C
 bool 	raopcl_accept_frames(struct raopcl_s *p);
 bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
 
-// Functions thread category D
 bool 	raopcl_start_at(struct raopcl_s *p, __u64 start_time);
-void 	raopcl_pause(struct raopcl_s *p);
-void 	raopcl_stop(struct raopcl_s *p);
 
 /*
 	The are thread safe

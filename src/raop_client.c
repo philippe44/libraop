@@ -404,20 +404,6 @@ bool raopcl_start_at(struct raopcl_s *p, __u64 start_time)
 
 
 /*----------------------------------------------------------------------------*/
-void raopcl_stop(struct raopcl_s *p)
-{
-	if (!p) return;
-
-	pthread_mutex_lock(&p->mutex);
-
-	p->flushing = true;
-	p->pause_ts = 0;
-
-	pthread_mutex_unlock(&p->mutex);
-}
-
-
-/*----------------------------------------------------------------------------*/
 bool raopcl_accept_frames(struct raopcl_s *p)
 {
 	bool accept = false, first_pkt = false;
@@ -1079,12 +1065,13 @@ bool raopcl_flush(struct raopcl_s *p, bool pause)
 
 	p->state = RAOP_FLUSHING;
 	p->retransmit = 0;
+	p->flushing = true;
+
+	if (pause) p->pause_ts = p->head_ts;
+	else p->pause_ts = 0;
+
 	seq_number = p->seq_number;
 	timestamp = p->head_ts;
-	if (pause) {
-		p->pause_ts = p->head_ts;
-		p->flushing = true;
-	}
 
 	pthread_mutex_unlock(&p->mutex);
 
