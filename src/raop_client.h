@@ -146,7 +146,7 @@ bool	raopcl_destroy(struct raopcl_s *p);
 bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
 bool 	raopcl_repair(struct raopcl_s *p);
 bool 	raopcl_disconnect(struct raopcl_s *p);
-bool    raopcl_flush(struct raopcl_s *p);
+bool    raopcl_flush(struct raopcl_s *p, bool pause);
 
 // Functions thread category B
 bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);

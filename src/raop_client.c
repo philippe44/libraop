@@ -386,23 +386,7 @@ static int raopcl_encrypt(raopcl_data_t *raopcld, __u8 *data, int size)
 }
 
 
-/*----------------------------------------------------------------------------*/
-void raopcl_pause(struct raopcl_s *p)
-{
-	if (!p || p->state != RAOP_STREAMING) return;
-
-	pthread_mutex_lock(&p->mutex);
-
-	p->pause_ts = p->head_ts;
-	p->flushing = true;
-
-	pthread_mutex_unlock(&p->mutex);
-
-	LOG_INFO("[%p]: set pause %Lu", p, p->pause_ts);
-}
-
-
-/*----------------------------------------------------------------------------*/
+ /*----------------------------------------------------------------------------*/
 bool raopcl_start_at(struct raopcl_s *p, __u64 start_time)
 {
 	if (!p) return false;
@@ -1083,7 +1067,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_flush(struct raopcl_s *p)
+bool raopcl_flush(struct raopcl_s *p, bool pause)
 {
 	bool rc;
 	__u16 seq_number;
@@ -1092,13 +1076,19 @@ bool raopcl_flush(struct raopcl_s *p)
 	if (!p || p->state != RAOP_STREAMING) return false;
 
 	pthread_mutex_lock(&p->mutex);
+
 	p->state = RAOP_FLUSHING;
 	p->retransmit = 0;
 	seq_number = p->seq_number;
 	timestamp = p->head_ts;
+	if (pause) {
+		p->pause_ts = p->head_ts;
+		p->flushing = true;
+	}
+
 	pthread_mutex_unlock(&p->mutex);
 
-	LOG_INFO("[%p]: flushing up to s:%u ts:%Lu", p, seq_number, p->head_ts);
+	LOG_INFO("[%p]: flushing up to s:%u ts:%Lu", p, seq_number, timestamp);
 
 	// everything BELOW these values should be FLUSHED ==> the +1 is mandatory
 	rc = rtspcl_flush(p->rtspcl, seq_number + 1, timestamp + 1);
