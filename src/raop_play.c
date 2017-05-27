@@ -398,14 +398,16 @@ int main(int argc, char *argv[]) {
 			switch (c) {
 			case 'p':
 				if (status == PLAYING) {
+					raopcl_pause(raopcl);
+					raopcl_flush(raopcl);
 					status = PAUSED;
-					raopcl_flush(raopcl, true);
 					LOG_INFO("Pause at : %u.%u", SECNTP(get_ntp(NULL)));
 				}
 				break;
 			case 's':
+				raopcl_stop(raopcl);
+				raopcl_flush(raopcl);
 				status = STOPPED;
-				raopcl_flush(raopcl, false);
 				LOG_INFO("Stopped at : %u.%u", SECNTP(get_ntp(NULL)));
 				break;
 			case 'r': {

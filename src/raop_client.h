@@ -64,8 +64,8 @@
  latency.
 
  To pause, stop calling raopcl_accept_frames and raopcl_send_chunk (obviously),
- call raopcl_flush with true. To stop, just do the same an call raopcl_flush
- with false;
+ call raopcl_pause then raopcl_flush. To stop call raopcl_stop instead of
+ raopcl_pause
 
  To resume, optionally call raopcl_set_start to restart at a given time or just
  start calling raopcl_accept_frames and send raopcl_send_chunk
@@ -146,7 +146,7 @@ bool	raopcl_destroy(struct raopcl_s *p);
 bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
 bool 	raopcl_repair(struct raopcl_s *p);
 bool 	raopcl_disconnect(struct raopcl_s *p);
-bool    raopcl_flush(struct raopcl_s *p, bool pause);
+bool    raopcl_flush(struct raopcl_s *p);
 
 bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);
 bool 	raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration);
@@ -159,6 +159,8 @@ bool 	raopcl_accept_frames(struct raopcl_s *p);
 bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
 
 bool 	raopcl_start_at(struct raopcl_s *p, __u64 start_time);
+void 	raopcl_pause(struct raopcl_s *p);
+void 	raopcl_stop(struct raopcl_s *p);
 
 /*
 	The are thread safe
