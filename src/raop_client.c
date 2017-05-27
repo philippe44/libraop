@@ -72,29 +72,16 @@
  the same NTP and if we want to use only a 32 bits value, raopcl_time32_to_ntp()
  do the "guess" of a 32 bits ms counter into a proper NTP
 
- --- head_ts and offset_ts ---
- The head_ts value indicates the absolute frame number of the most recent frame
- in the player queue. When starting to play without a special start time, we
- assume that we want to start at the closed opportunity, so by setting the
- head_ts to the current absolute_ts (called now_ts), we are sure that the player
- will start to play the first frame at now_ts + latency, which means it has time
- to process a frame send with now_ts timestamp. We could further optimize that
- by reducing a bit this value
- To handle network jitter, there is a queue in the player, so frames can be sent
- ahead of current absolute ts. This means that the most recently sent frame has
- a head_ts which is at maximum now_ts + queue_len
- The offset_ts is required to handle flushing properly. Players do not accept
- frames with timestamps that have already been used, timestamps must always
- increment. When sending the 1st frame after a flush, the head_ts is normally
- reset to now_ts, but because such frame number might already have been sent due
- to buffering, we cannot reset the head_ts, it must continue where it is. This
- gap is offset_ts = head_ts(at restart) - now_ts
- But that new timestamp is ahead of the earlies "absolute TS", so to make sure
- these new "offset" frames are sent with the same latency than the others, the
- synchro between NTP and TS must alos be offset by that value
- None of this needs to be done if now_ts is above head_ts when starting playback
- after flushing, head_ts can simply be reset to now_ts and synchronization does
- not need to be offset any more
+ --- head_ts ---
+ The head_ts value indicates the absolute frame number of the frame to be played
+ in latency seconds.
+ When starting to play without a special start time, we assume that we want to
+ start at the closed opportunity, so by setting the head_ts to the current
+ absolute_ts (called now_ts), we are sure that the player will start to play the
+ first frame at now_ts + latency, which means it has time to process a frame
+ send with now_ts timestamp. We could further optimize that by reducing a bit
+ this value
+ When sending the 1st frame after a flush, the head_ts is reset to now_ts
 
  --- latency ---
  AirPlay devices seem to send everything with a latency of 11025 + the latency
@@ -105,60 +92,26 @@
  anticipate by raopcl_latency() if he wants the next frame to be played exactly
  at a given NTP time
 
- --- queuing & pause ---
-  A small example to explain how pause and the whole thing works. Everything
-  expressed in frames timestamp format
-  Say that latency is 10 frames, the queue size is 100 frames and we want to
-  start at t=2000, assuming now=1000
-  Say that the player will want to pause at t=2200 and resume at t=2500
-  "avail()" means calls to raopcl_space_frames() and we assume that buffer fill
-  takes no time.
-  cons = now_ts - first_ts or 0 if negative
-  total = head_ts - first_ts
+ --- raopcl_accept_frame ---
+ This function must be called before sending any data and forces the right pace
+ on the caller. When running, it simply checks that now_ts is above head_ts plus
+ chunk_len. But it has a critical role at start and resume. When called after a
+ raopcl_stop or raopcl_pause has been called, it will return false until a call
+ to raopcl_flush has been finished *or* the start_time has been reached. When
+ player has been actually flushed, then it will reset the head_ts to the current
+ time or the start_time, force sending of the various airplay sync bits and then
+ return true, resume normal mode.
 
-  - Call raopcl_set_start with 2000-10=1990. This sets the start_ts at 1990
-  - When a call to raopcl_accept_frames is made it sets head_ts and first_ts to
-	1990 (the start_ts)
-  - At t=1000 avail is 100 as cons=0, total=1990-1990=0
-  - Buffer fill starts and when head_ts=2090, avail returns zero and no further
-	frames can be filled
-  - At this point, the client has provided 100 frames the head_ts has been
-	incremented is now 2090 (+100) - this will stay like that till t=2000
-  - At t=2000 cons=2000-1990=10, total=2090-1990=100, avail is 10 so the client
-	sends another 10 frames, the sum of supplied frames is 110 and head_ts is
-	now 2100. This happened just AFTER t=2000
-  - To calculate the number of frames already *heard*, the client must use what
-	he has sent (110), minus what is in the buffer using raopcl_queued_frames()
-	(100), minus the latency (10) so at t=2000, 0 frames have been heard!
-  - At t=2001, cons=2001-1990=11, total=2100-1990=110, so avail=100-(110-11)=1
-	The cLient fills one frame so it has sent 111 frames and 111-100-10=1 frames
-	has been heard. The value of head_ts is 2101
-  - At t=2200, right after filling frames, cons=2200-1990=210,
-	total=2300-1990=310, so avail=100-(310-210)=0, the client has provided
-	another 200 frames, so 310 in total (head_ts is 2300)
-  - At this point, the client decides to stop and call raopcl_set_pause(). That
-	sets pause_ts at head_ts, so 2300.
-  -	Client must absolutely *not* call raopcl_send_chunk() and must call
-	raopcl_flush() to mute audio. Calls to raopcl_accept_frames returns 0 to
-	block any further attemp to send frames.
-  - Any further call to raopcl_queued_frames avail will use pause_ts, so the
-	size of the queue is frozen, as expected. When calculating what has been
-	heard, client does 310(sent)-100(queue)-10(latency)=200 which is correct
-  - At t=2400, the client decides to set resume at 2500, so it expects that the
-	1st frame to be played, will be at 2500 precisely and that frame will the
-	201th frames BECAUSE ONLY 200 AS BEEN PLAYED SO FAR
-  - As it should, the client calls raopcl_set_start with 2500-10=2490. That sets
-	first_ts=start_ts=2490. The raopcl_accept_frames will remain stuck until
-	flushing has been done or we are going closer than 2500-10
-  - When flushing is done, say at t=2450, raopcl_accept_frames sets head_ts and
-	first_ts to	2490, so cons=2350-2490=0, total=0, avail is still zero until
-	ts=2491 is reached.
-  - At frame 2491, cons=2491-2490=1, total=0, so avail=1, the client can send 1
-	frame. Such frame will he heard in 2501, but this next frame is the 311th
-	frame, so it would be played with 100+10+1 frames early.
-  - ... so reality says 100+20-1, need to check why (and this is not platform
-   dependent)
-
+ --- why raopcl_stop/pause and raopcl_flush ---
+ It seems that they could have been merged into a single function. This allows
+ independant threads for audio sending (raopcl_accept_frames/raopcl_send_chunks)
+ and player control. The control thread can then call raopcl_stop and queue the
+ raopcl_flush in another thread (remember that raopcl_flush is RTSP so it can
+ take time). The thread doing the audio can call raopct_accept_frames as much
+ as it wants, it will not be allowed to send anything before the *actual* flush
+ is done. The control thread could even ask playback to restart immediately, no
+ audio data will be accepted until flush is actually done and synchronization
+ will be maintained, even in case of restart at a given time
 */
 
 
