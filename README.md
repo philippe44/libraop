@@ -33,7 +33,7 @@ Either get the NTP of the master machine from any application and then fork mult
 the same audio file, or use the -ntp option to get NTP to be written to a file and re-use that file when calling the instances of 
 raop_play
 
-Makesfiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile
+Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile
 
 You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32
 ALAC codec is also needed from here: https://github.com/macosforge/alac
