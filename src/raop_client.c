@@ -403,7 +403,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 		now_ts = NTP2TS(now, p->sample_rate);
 
 		// Not flushed yet, but we have time to wait, so pretend we are full
-		if (p->state != RAOP_FLUSHED && (!p->start_ts || p->start_ts > now_ts + p->latency_frames)) {
+		if (p->state != RAOP_FLUSHED && (!p->start_ts || p->start_ts > now_ts + raopcl_latency(p))) {
 			pthread_mutex_unlock(&p->mutex);
 			return false;
 		 }
@@ -415,17 +415,17 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 			p->state = RAOP_STREAMING;
 		}
 
-		// either flushed or timedout, update pointers
-		p->first_ts = p->start_ts ? p->start_ts : now_ts;
-
 		// unpausing ...
 		if (!p->pause_ts) {
-			p->head_ts = p->first_ts;
+			p->head_ts = p->first_ts = p->start_ts ? p->start_ts : now_ts;
 			if (first_pkt) _raopcl_send_sync(p, true);
 			LOG_INFO("[%p]: restarting w/o pause n:%u.%u, hts:%Lu", p, SECNTP(now), p->head_ts);
 		}
 		else {
 			__u16 n, i, chunks = raopcl_latency(p) / p->chunk_len;
+
+			// if un-pausing w/o start_time, can anticipate as we have buffer
+			p->first_ts = p->start_ts ? p->start_ts : now_ts - raopcl_latency(p);
 
 			// last head_ts shall be first + raopcl_latency - chunk_len
 			p->head_ts = p->first_ts - p->chunk_len;
