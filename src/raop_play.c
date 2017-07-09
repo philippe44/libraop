@@ -80,9 +80,10 @@ static int print_usage(char *argv[])
 			   "\t[-w <wait>]  (start after <wait> milliseconds)\n"
 			   "\t[-n <start>] (start at NTP <start> + <wait>)\n"
 			   "\t[-nf <start>] (start at NTP in <file> + <wait>)\n"
-			   "\t[-e (encrypt)]\n"
+			   "\t[-e] (encrypt)\n"
+			   "\t[-s <secret>] (valid secret for AppleTV)\n"
 			   "\t[-d <debug level>] (0 = silent)\n"
-			   "\t[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n",
+			   "\t[-i] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n",
 			   name);
 	return -1;
 }
@@ -239,6 +240,7 @@ int main(int argc, char *argv[]) {
 	raop_crypto_t crypto = RAOP_CLEAR;
 	__u64 start = 0, start_at = 0, last = 0, frames = 0;
 	bool interactive = false;
+	char *secret = NULL;
 	struct in_addr host = { INADDR_ANY };
 
 	for(i = 1; i < argc; i++){
@@ -269,6 +271,10 @@ int main(int argc, char *argv[]) {
 		}
 		if(!strcmp(argv[i],"-i")){
 			interactive = true;
+			continue;
+		}
+		if(!strcmp(argv[i],"-s")){
+			secret = argv[++i];
 			continue;
 		}
 		if(!strcmp(argv[i],"-n")){
@@ -328,8 +334,7 @@ int main(int argc, char *argv[]) {
 	init_platform(interactive);
 
 	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, true, MAX_SAMPLES_PER_CHUNK,
-								//latency, crypto, false, "a18b940d3e1302e932a64defccf560a0714b3fa2683bbe3cea808b3abfa58b7d",
-								latency, crypto, false, NULL,
+								latency, crypto, false, secret,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);
