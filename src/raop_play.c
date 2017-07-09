@@ -328,7 +328,9 @@ int main(int argc, char *argv[]) {
 	init_platform(interactive);
 
 	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, true, MAX_SAMPLES_PER_CHUNK,
-								latency, crypto, false, 44100, 16, 2,
+								//latency, crypto, false, "a18b940d3e1302e932a64defccf560a0714b3fa2683bbe3cea808b3abfa58b7d",
+								latency, crypto, false, NULL,
+								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);
 		close_platform(interactive);

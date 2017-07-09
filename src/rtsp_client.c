@@ -21,6 +21,15 @@
 #include <stdio.h>
 #include "platform.h"
 #include <ctype.h>
+
+#include <openssl/rand.h>
+
+#include "../include/external_calls.h"
+#include "../include/ed25519_signature.h"
+#include "../include/curve25519_dh.h"
+#include "sha512.h"
+#include "aes_ctr.h"
+
 #include "aexcl_lib.h"
 #include "rtsp_client.h"
 
@@ -34,7 +43,7 @@ typedef struct rtspcl_s {
     char url[128];
     int cseq;
     key_data_t exthds[MAX_KD];
-    char *session;
+	char *session;
 	const char *useragent;
 	struct in_addr local_addr;
 } rtspcl_t;
@@ -48,7 +57,9 @@ static char *rtrim(char *s);
 static char *ltrim(char *s);
 
 static bool exec_request(rtspcl_t *rtspcld, char *cmd, char *content_type,
-			 char *content, int length, int get_response, key_data_t *hds, key_data_t *kd, char* url);
+			 char *content, int length, int get_response, key_data_t *hds,
+			 key_data_t *kd, char **resp_content, int *resp_len,
+			 char* url);
 
 
 /*----------------------------------------------------------------------------*/
@@ -127,7 +138,7 @@ bool rtspcl_disconnect(struct rtspcl_s *p)
 	if (!p) return false;
 
 	if (p->fd != -1) {
-		rc = exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL);
+		rc = exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL, NULL, NULL);
 		close(p->fd);
 	}
 
@@ -235,7 +246,7 @@ bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp)
 {
 	if(!p) return false;
 
-	return exec_request(p, "ANNOUNCE", "application/sdp", sdp, 0, 1, NULL, NULL, NULL);
+	return exec_request(p, "ANNOUNCE", "application/sdp", sdp, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
 
 
@@ -255,7 +266,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 	if (!hds[0].data) return false;
 	hds[1].key = NULL;
 
-	if (!exec_request(p, "SETUP", NULL, NULL, 0, 1, hds, rkd, NULL)) return false;
+	if (!exec_request(p, "SETUP", NULL, NULL, 0, 1, hds, rkd, NULL, NULL, NULL)) return false;
 	free(hds[0].data);
 
 	if ((temp = kd_lookup(rkd, "Session")) != NULL) {
@@ -291,7 +302,7 @@ bool rtspcl_record(struct rtspcl_s *p, __u16 start_seq, __u32 start_ts, key_data
 	if (!hds[1].data) return false;
 	hds[2].key	= NULL;
 
-	rc = exec_request(p, "RECORD", NULL, NULL, 0, 1, hds, rkd, NULL);
+	rc = exec_request(p, "RECORD", NULL, NULL, 0, 1, hds, rkd, NULL, NULL, NULL);
 	free(hds[1].data);
 
 	return rc;
@@ -303,7 +314,7 @@ bool rtspcl_set_parameter(struct rtspcl_s *p, char *param)
 {
 	if (!p) return false;
 
-	return exec_request(p, "SET_PARAMETER", "text/parameters", param, 0, 1, NULL, NULL, NULL);
+	return exec_request(p, "SET_PARAMETER", "text/parameters", param, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
 
 
@@ -321,7 +332,7 @@ bool rtspcl_set_artwork(struct rtspcl_s *p, __u32 timestamp, char *content_type,
 	hds[0].data	= rtptime;
 	hds[1].key	= NULL;
 
-	return exec_request(p, "SET_PARAMETER", content_type, image, size, 2, hds, NULL, NULL);
+	return exec_request(p, "SET_PARAMETER", content_type, image, size, 2, hds, NULL, NULL, NULL, NULL);
 }
 
 
@@ -382,7 +393,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list arg
 	// set "mlit" object size
 	for (i = 0; i < 4; i++) *(str + 4 + i) = (q-str-8) >> (24-8*i);
 
-	rc = exec_request(p, "SET_PARAMETER", "application/x-dmap-tagged", str, q-str, 2, hds, NULL, NULL);
+	rc = exec_request(p, "SET_PARAMETER", "application/x-dmap-tagged", str, q-str, 2, hds, NULL, NULL, NULL, NULL);
 	free(str);
 	return rc;
 }
@@ -393,26 +404,92 @@ bool rtspcl_options(struct rtspcl_s *p)
 {
 	if(!p) return false;
 
-	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, NULL, "*");
+	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, NULL, NULL, NULL, "*");
 }
 
+
 /*----------------------------------------------------------------------------*/
-bool rtspcl_auth_setup(struct rtspcl_s *p)
+bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 {
-	/* //itunes second
-	char data[] = {
-	0x01, 0x80, 0xc3, 0xb3, 0xe8, 0xd6, 0x22, 0xd0, 0x50, 0xeb, 0xd8,
-	0x17, 0x40, 0x11, 0xd8, 0x93, 0x00, 0x55, 0x65, 0xe7, 0x56, 0x43,
-	0x76, 0xff, 0x41, 0x12, 0x84, 0x92, 0xac, 0xfb, 0xec, 0xd4, 0x1d }; */
-	//itunes first
-	char data[] = {
-	0x01, 0xad, 0xb2, 0xa4, 0xc7, 0xd5, 0x5c, 0x97, 0x6c, 0x34, 0xf9,
-	0x2e, 0x0e, 0x05, 0x48, 0x90, 0x3b, 0x3a, 0x2f, 0xc6, 0x72, 0x2b,
-	0x88, 0x58, 0x08, 0x76, 0xd2, 0x9c, 0x61, 0x94, 0x18, 0x52, 0x50 };
+	__u8 auth_pub[ed25519_public_key_size], auth_priv[ed25519_private_key_size];
+	__u8 verify_pub[ed25519_public_key_size], verify_secret[ed25519_secret_key_size];
+	__u8 atv_pub[ed25519_public_key_size], *atv_data;
+	__u8 secret[ed25519_secret_key_size], shared_secret[ed25519_secret_key_size];
+	__u8 *buf, *content;
+	int atv_len, len;
+	SHA512_CTX digest;
+	__u8 signed_keys[ed25519_signature_size];
+	__u8 aes_key[16], aes_iv[16];
+	aes_ctr_context ctx;
+	bool rc = true;
 
 	if (!p) return false;
+	buf = secret;
+	hex2bytes(secret_hex, &buf);
 
-	return exec_request(p, "POST", "application/octet-stream", data, 33, 1, NULL, NULL, "/auth-setup");
+	// retrieve authentication keys from secret
+	ed25519_CreateKeyPair(auth_pub, auth_priv, NULL, secret);
+	// create a verification public key
+	RAND_bytes(verify_secret, ed25519_secret_key_size);
+	VALGRIND_MAKE_MEM_DEFINED(verify_secret, ed25519_secret_key_size);
+	curve25519_dh_CalculatePublicKey(verify_pub, verify_secret);
+
+	// POST the auth_pub and verify_pub concataned
+	buf = malloc(4 + ed25519_public_key_size * 2);
+	len = 0;
+	memcpy(buf, "\x01\x00\x00\x00", 4); len += 4;
+	memcpy(buf + len, verify_pub, ed25519_public_key_size); len += ed25519_public_key_size;
+	memcpy(buf + len, auth_pub, ed25519_public_key_size); len += ed25519_public_key_size;
+
+	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf, len, 1, NULL, NULL, (char**) &content, &atv_len, "/pair-verify")) {
+		LOG_ERROR("[%p]: AppleTV verify step 1 failed (pair again)", p);
+		free(buf);
+		return false;
+	}
+
+	// get atv_pub and atv_data then create shared secret
+	memcpy(atv_pub, content, ed25519_public_key_size);
+	atv_data = malloc(atv_len - ed25519_public_key_size);
+	memcpy(atv_data, content + ed25519_public_key_size, atv_len - ed25519_public_key_size);
+	curve25519_dh_CreateSharedKey(shared_secret, atv_pub, verify_secret);
+	free(content);
+
+	// build AES-key & AES-iv from shared secret digest
+	SHA512_Init(&digest);
+	SHA512_Update(&digest, "Pair-Verify-AES-Key", strlen("Pair-Verify-AES-Key"));
+	SHA512_Update(&digest, shared_secret, ed25519_secret_key_size);
+	SHA512_Final(buf, &digest);
+	memcpy(aes_key, buf, 16);
+
+	SHA512_Init(&digest);
+	SHA512_Update(&digest, "Pair-Verify-AES-IV", strlen("Pair-Verify-AES-IV"));
+	SHA512_Update(&digest, shared_secret, ed25519_secret_key_size);
+	SHA512_Final(buf, &digest);
+	memcpy(aes_iv, buf, 16);
+
+	// sign the verify_pub and atv_pub
+	memcpy(buf, verify_pub, ed25519_public_key_size);
+	memcpy(buf + ed25519_public_key_size, atv_pub, ed25519_public_key_size);
+	ed25519_SignMessage(signed_keys, auth_priv, NULL, buf, ed25519_public_key_size * 2);
+
+	// encrypt the signed result + atv_data, add 4 NULL bytes at the beginning
+	aes_ctr_init(&ctx, aes_key, aes_iv, CTR_BIG_ENDIAN);
+	memcpy(buf, atv_data, atv_len - ed25519_public_key_size);
+	aes_ctr_encrypt(&ctx, buf, atv_len - ed25519_public_key_size);
+	memcpy(buf + 4, signed_keys, ed25519_signature_size);
+	aes_ctr_encrypt(&ctx, buf + 4, ed25519_signature_size);
+	memcpy(buf, "\x00\x00\x00\x00", 4);
+	len = ed25519_signature_size + 4;
+	free(atv_data);
+
+	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf, len, 1, NULL, NULL, NULL, NULL, "/pair-verify")) {
+		LOG_ERROR("[%p]: AppleTV verify step 2 failed (pair again)", p);
+		rc = false;
+	}
+
+	free(buf);
+
+	return rc;
 }
 
 
@@ -429,7 +506,7 @@ bool rtspcl_flush(struct rtspcl_s *p, __u16 seq_number, __u32 timestamp)
 	if (!hds[0].data) return false;
 	hds[1].key	= NULL;
 
-	rc = exec_request(p, "FLUSH", NULL, NULL, 0, 1, hds, NULL, NULL);
+	rc = exec_request(p, "FLUSH", NULL, NULL, 0, 1, hds, NULL, NULL, NULL, NULL);
 	free(hds[0].data);
 
 	return rc;
@@ -441,7 +518,7 @@ bool rtspcl_teardown(struct rtspcl_s *p)
 {
 	if (!p) return false;
 
-	return exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL);
+	return exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
 
 /*
@@ -449,7 +526,8 @@ bool rtspcl_teardown(struct rtspcl_s *p)
  * if this gets a success, *kd is allocated or reallocated (if *kd is not NULL)
  */
 static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type,
-				char *content, int length, int get_response, key_data_t *hds, key_data_t *rkd, char* url)
+				char *content, int length, int get_response, key_data_t *hds,
+				key_data_t *rkd, char **resp_content, int *resp_len, char* url)
 {
 	char line[2048];
 	char *req;
@@ -459,6 +537,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	int i,j, rval, len, clen;
 	int timeout = 10000; // msec unit
 	struct pollfd pfds;
+	key_data_t lkd[MAX_KD], *pkd;
 
 	if(!rtspcld || rtspcld->fd == -1) return false;
 
@@ -504,7 +583,6 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 	if (content_type && content) {
 		len += (length ? length : strlen(content));
-		//strncat(req, content, length ? length : strlen(content));
 		memcpy(req + strlen(req), content, length ? length : strlen(content));
 		req[len] = '\0';
 	}
@@ -541,17 +619,17 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 	i = 0;
 	clen = 0;
-	if (rkd) rkd[0].key = NULL;
+	if (rkd) pkd = rkd;
+	else pkd = lkd;
+	pkd[0].key = NULL;
 
 	while (read_line(rtspcld->fd, line, sizeof(line), timeout, 0) > 0) {
 		LOG_DEBUG("[%p]: <------ : %s", rtspcld, line);
 		timeout = 1000; // once it started, it shouldn't take a long time
 
-		if (!rkd) continue;
-
 		if (i && line[0] == ' ') {
 			for(j = 0; j < strlen(line); j++) if (line[j] != ' ') break;
-			rkd[i].data = strdup(line + j);
+			pkd[i].data = strdup(line + j);
 			continue;
 		}
 
@@ -559,15 +637,15 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 		if (!dp){
 			LOG_ERROR("[%p]: Request failed, bad header", rtspcld);
-			free_kd(rkd);
+			free_kd(pkd);
 			return false;
 		}
 
 		*dp = 0;
-		rkd[i].key = strdup(line);
-		rkd[i].data = strdup(dp + 1);
+		pkd[i].key = strdup(line);
+		pkd[i].data = strdup(dp + 1);
 
-		if (!strcasecmp(rkd[i].key, "Content-Length")) clen = atol(rkd[i].data);
+		if (!strcasecmp(pkd[i].key, "Content-Length")) clen = atol(pkd[i].data);
 
 		i++;
 	}
@@ -587,10 +665,14 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 		}
 
 		LOG_INFO("[%p]: Body data %d, %s", rtspcld, clen, data);
-		free(data);
+		if (resp_content) {
+			*resp_content = data;
+			if (resp_len) *resp_len = clen;
+		} else free(data);
 	}
 
-	if (rkd) rkd[i].key = NULL;
+	pkd[i].key = NULL;
+	if (!rkd) free_kd(pkd);
 
 	return true;
 }

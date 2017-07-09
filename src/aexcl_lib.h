@@ -45,6 +45,7 @@ char *kd_lookup(key_data_t *kd, char *key);
 void free_kd(key_data_t *kd);
 int remove_char_from_string(char *str, char rc);
 char *_aprintf(const char *fmt, ...);
+int hex2bytes(char *hex, __u8 **bytes);
 
 
 #endif

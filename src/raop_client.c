@@ -180,6 +180,7 @@ typedef struct raopcl_s {
 	struct alac_codec_s *alac_codec;
 	raop_crypto_t crypto;
 	bool auth;
+	char secret[SECRET_SIZE + 1];
 } raopcl_data_t;
 
 
@@ -641,7 +642,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 /*----------------------------------------------------------------------------*/
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int chunk_len,
-							   int latency_frames, raop_crypto_t crypto, bool auth,
+							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
@@ -664,6 +665,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	raopcld->codec = codec;
 	raopcld->crypto = crypto;
 	raopcld->auth = auth;
+	if (secret) strncpy(raopcld->secret, secret, SECRET_SIZE);
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
 	raopcld->chunk_len = chunk_len;
 	strcpy(raopcld->DACP_id, DACP_id ? DACP_id : "");
@@ -955,11 +957,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 
 	LOG_INFO("[%p]: local interface %s", p, rtspcl_local_ip(p->rtspcl));
 
-	// RTSP auth
-	// if(rtspcl_auth_setup(p->rtspcl)) goto erexit;
-
-	// RTSP get options (not needed)
-	// if (p->state == RAOP_DOWN_FULL && !rtspcl_options(p->rtspcl)) goto erexit;
+	// RTSP pairing verify
+	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
 
 	// build sdp parameter
 	buf = strdup(inet_ntoa(host));

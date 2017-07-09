@@ -73,8 +73,9 @@
 
 #include "platform.h"
 
-#define MAX_SAMPLES_PER_CHUNK 352
-#define RAOP_LATENCY_MIN 11025
+#define MAX_SAMPLES_PER_CHUNK 	352
+#define RAOP_LATENCY_MIN 		11025
+#define SECRET_SIZE				64
 
 #define NTP2MS(ntp) ((((ntp) >> 10) * 1000L) >> 22)
 #define MS2NTP(ms) (((((__u64) (ms)) << 22) / 1000) << 10)
@@ -139,7 +140,7 @@ typedef struct {
 // if volume < -30 and not -144 or volume > 0, then not "initial set volume" will be done
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int frame_len,
-							   int latency_frames, raop_crypto_t crypto, bool auth,
+							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);

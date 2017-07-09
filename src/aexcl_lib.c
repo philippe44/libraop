@@ -271,4 +271,19 @@ int remove_char_from_string(char *str, char rc)
 	return num;
 }
 
+/*
+ * transform an hex string (into an array or bytes)
+ * return the number of deleted characters
+ */
+int hex2bytes(char *hex, __u8 **bytes) {
+	size_t i, len = strlen(hex) / 2;
+
+	if (!*bytes && (*bytes = malloc(len)) == NULL) return 0;
+
+	for (i = 0; i < len; i++) {
+		sscanf(hex + i*2, "%2hhx", *bytes + i);
+	}
+
+	return len;
+}
 
