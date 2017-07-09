@@ -22,11 +22,13 @@ raop_play <options> <server_ip> <filename ('-' for stdin)>"
 	
 	[-nf <start>] (start at NTP in <file> + <wait>)
 	
-	[-e (encrypt)]
+	[-e ] (encrypt)
+	
+	[-s <secret> ] (AppleTV secret key - must be paired before)
 	
 	[-d <debug level>] (0 = silent)
 	
-	[-i (interactive)] (commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit)
+	[-i ] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit)
 	
 It's possible to send synchronous audio to multiple players by using the NTP options (optionally combined with the wait option).
 Either get the NTP of the master machine from any application and then fork multiple instances of raop_play with that NTP and
