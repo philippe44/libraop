@@ -122,12 +122,6 @@ substr($aes_iv, -1, 1) = pack('C', unpack('C', substr($aes_iv, -1, 1)) + 1);
 say "<aes_iv>      :", unpack("H*", $aes_iv);
 
 my ($epk, $tag) = gcm_encrypt_authenticate('AES', $aes_key, $aes_iv, '', $a_public);
-=comment
-my $cipher = Crypt::AuthEnc::GCM->new("AES", $aes_key, $aes_iv);
-#$cipher->aad_add('');
-my $epk = $cipher->encrypt_add("FUCK YOURSELF");
-my $tag = $cipher->encrypt_done();
-=cut
 say "<epk>         :", unpack("H*", $epk);
 say "<tag>         :", unpack("H*", $tag);
 
