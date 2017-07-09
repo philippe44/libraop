@@ -75,9 +75,7 @@ if ($force) {
 	$data->{salt} = Crypt::SRP::_bignum2bytes(Math::BigInt->new('0xd62c98fe76c77ad445828c33063fc36f'));
 	$client->{predefined_a} = Math::BigInt->new('0xa18b940d3e1302e932a64defccf560a0714b3fa2683bbe3cea808b3abfa58b7d');
 	$pin = '1234';
-} else {
-	$client->{predefined_a} = Math::BigInt->new('0xa18b940d3e1302e932a64defccf560a0714b3fa2683bbe3cea808b3abfa58b7d');
-}
+} 
 
 my ($A, $a) = $client->client_compute_A(32);
 my $a_public = Crypt::Ed25519::eddsa_public_key($a);
@@ -128,6 +126,12 @@ say "<tag>         :", unpack("H*", $tag);
 $param = { 'epk' => $epk, 'authTag' => $tag };
 $data = step($ua, 'http://192.168.2.52:7000/pair-setup-pin', $param);
 
+if (defined $data) {
+	say "SUCCESS";
+} else {
+	say "FAILED";	
+}
+
 my $credentials = $client_id . ":" . unpack("H*", $a);
 say "credentials   :", $credentials;
 
@@ -156,7 +160,7 @@ $req->header('Content-Type' => 'application/octet-stream');
 $req->content("\x01\x00\x00\x00" . $verify_public . $a_public );			 
 my $res = $ua->request($req);
 #say Dumper($res);
-exit if !$res->is_success;
+
 $data = $res->content;
 if ($force) {
 	$data = pack("H*", 'd62c8c9548d836736978ad4d426df3495192407bbbb9466c9970794cdd2fe43a3067a3ea868ade5c9fab43a8d5dc4d53ca1115dbf1c882888f877e85b65c3a82a61583f24c33bf0b9a6ec5c4ab2ecc555a939e7633557453854795e82f2d7ef6');
@@ -201,9 +205,11 @@ my $req = HTTP::Request->new(POST => 'http://192.168.2.52:7000/pair-verify');
 $req->header('Content-Type' => 'application/octet-stream');
 $req->content($signature);			 
 my $res = $ua->request($req);
-#say Dumper($res);
-exit if !$res->is_success;
 
-say "VERIFIED";
+if ($res->is_success) {
+	say "VERIFIED";
+} else {
+	say "FAILED";	
+}	
 
 
