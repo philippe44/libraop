@@ -20,6 +20,7 @@ use Crypt::Mode::CTR;
 use Encode qw(decode encode);
 
 my $force  = 0;
+my $host = 'http://192.168.1.10:7000';
 
 sub step {
 	my ($ua, $url, $param) = @_;
@@ -58,12 +59,12 @@ $ua->timeout(2);
 
 # step 0)
 say "step ... 0";
-step($ua, 'http://192.168.2.52:7000/pair-pin-start');
+step($ua, '$host/pair-pin-start');
 
 # step 1)
 say "step ... 1";
 $param = { 'method' => 'pin', 'user' => $client_id};
-$data = step($ua, 'http://192.168.2.52:7000/pair-setup-pin', $param);
+$data = step($ua, '$host/pair-setup-pin', $param);
 
 # step 2)
 say "step ... 2";
@@ -97,7 +98,7 @@ my $M1 = $client->client_compute_M1;
 say "<M1>    :", unpack("H*", $M1);
 
 $param = { 'pk' => $A, 'proof' => $M1 };
-$data = step($ua, 'http://192.168.2.52:7000/pair-setup-pin', $param);
+$data = step($ua, '$host/pair-setup-pin', $param);
 
 #exit if !$client->client_verify_M2($data->{proof});
 my $K = $client->get_secret_K;
@@ -124,7 +125,7 @@ say "<epk>         :", unpack("H*", $epk);
 say "<tag>         :", unpack("H*", $tag);
 
 $param = { 'epk' => $epk, 'authTag' => $tag };
-$data = step($ua, 'http://192.168.2.52:7000/pair-setup-pin', $param);
+$data = step($ua, '$host/pair-setup-pin', $param);
 
 if (defined $data) {
 	say "SUCCESS";
@@ -155,7 +156,7 @@ if ($force) {
 my $verify_public = pack("H*", $verifier->public_key( $verify_secret_hex ));
 say "verify_pub    :", unpack("H*", $verify_public);
 
-my $req = HTTP::Request->new(POST => 'http://192.168.2.52:7000/pair-verify');
+my $req = HTTP::Request->new(POST => '$host/pair-verify');
 $req->header('Content-Type' => 'application/octet-stream');
 $req->content("\x01\x00\x00\x00" . $verify_public . $a_public );			 
 my $res = $ua->request($req);
@@ -201,7 +202,7 @@ my $signature = $m->add($signed);
 $signature = "\x00\x00\x00\x00" . $signature; 
 say "signature     :", unpack("H*", $signature);
 
-my $req = HTTP::Request->new(POST => 'http://192.168.2.52:7000/pair-verify');
+my $req = HTTP::Request->new(POST => '$host/pair-verify');
 $req->header('Content-Type' => 'application/octet-stream');
 $req->content($signature);			 
 my $res = $ua->request($req);
