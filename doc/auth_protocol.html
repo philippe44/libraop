@@ -11,12 +11,12 @@
 		a:visited { color: #800080 }
 	</style>
       </head>
-      <body style="                                   color: black;" dir="ltr" lang="fr-FR"
+      <body style="                                     color: black;" dir="ltr"
 
-        link="#0000ff" vlink="#800080">
+        lang="fr-FR" link="#0000ff" vlink="#800080">
         <p class="msonormal" style="margin-bottom: 0cm" lang="en-US"><font face="Segoe UI, sans-serif"><font
 
-              style="font-size: 10pt" size="2"><i>Version 0.11</i></font></font></p>
+              style="font-size: 10pt" size="2"><i>Version 0.12</i></font></font></p>
         <h1 id="introduction" style="color: rgb(9, 89, 138); margin-top: 50px; margin-bottom: 20px; border-top: 2px solid rgb(9, 89, 138); border-bottom: 2px solid rgb(9, 89, 138); padding: 10px 20px; background-color: rgb(239, 248, 253); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">10.
           Pairing &amp; Authenticating</h1>
         <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify">
@@ -43,15 +43,19 @@
 
               style="font-size: 12pt" size="3">It’s critical that the whole
               exchange (maybe except the /pair-pin-start) is done with the same
-              socket, so make sure your HTTP library uses keep-alive. The
-              example below use RTSP/1.0 but HTTP/1.0 seems to be usable with
-              now difference.</font></font></p>
+              socket, so make sure your HTTP library uses keep-alive (it is not
+              mandatory, for AppleTV, to send the Connection: keep-alive, just
+              make sure the HTTP tool you use does not close the connection once
+              it has received an answer) . The example below use RTSP/1.0 but
+              HTTP/1.0 seems to be usable with no difference. <br>
+            </font></font></p>
         <p class="msonormal" style="margin-top: 0.66cm; margin-bottom: 0.4cm" lang="en-US">
           <span style="display: inline-block; border-top: none; border-bottom: 1.00pt solid #09598a; border-left: none; border-right: none; padding-top: 0cm; padding-bottom: 0.05cm; padding-left: 0cm; padding-right: 0cm"><font
 
               face="Segoe UI, sans-serif"><font style="font-size: 18pt" size="5"><b><font
 
-                    color="#09598a">10.1. RTSP pairing (required only once)</font></b></font></font></span></p>
+                    color="#09598a">10.1. RTSP pairing (required only
+                    once)</font></b></font></font></span></p>
         <p class="msonormal" style="margin-top: 0.26cm; margin-bottom: 0.5cm" lang="en-US">
           <font color="#09598a"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
 
@@ -124,9 +128,9 @@ style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">Up to 16
 
 style="background-color: rgb(241, 248, 253);"><td style="padding: 5px; font-size: 9pt; text-align: left;"><b>method</b></td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left;">pin</td><td style="padding: 5px; font-size: 9pt; text-align: left;">4</td><td
+style="padding: 5px; font-size: 9pt; text-align: left;">pin</td><td style="padding: 5px; font-size: 9pt; text-align: left;">3</td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left;">AppleTV displays a 4 digit pin code</td></tr></tbody></table><p
+style="padding: 5px; font-size: 9pt; text-align: left;">String 'pin' - AppleTV displays a 4 digit pin code</td></tr></tbody></table><p
 
 class="msonormal" style="margin-left: 0.79cm; margin-right: 0.26cm; margin-top: 0.26cm; margin-bottom: 0cm; text-transform: uppercase"><font
 
@@ -350,14 +354,14 @@ lang="en-US">
 class="msonormal">(NB
 :
             ‘|’ represents a byte array concatenation, not a logical “or”
-            and ^is XOR)</i></font></font></p>
+            and ^ is XOR)</i></font></font></p>
     <p class="msonormal" style="margin-top: 0.35cm; margin-bottom: 0.4cm" align="justify"
 
 lang="en-US">
       <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3"><u><b>Note:</b></u>&nbsp;The
 calculation
-          of &lt;K&gt;, the shared secret hash is not compliant to
-          SRP6</font></font></p>
+          of &lt;K&gt;, the shared secret hash is not compliant with
+          default SRP6</font></font></p>
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm; font-weight: normal"
 
 align="justify" lang="en-US">
@@ -457,8 +461,8 @@ style="font-size: 9pt" size="2">The M2 proof calculated by the server</font></fo
 </table><font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">This
 &lt;M2&gt;
           can be checked against the &lt;M2&gt; calculated by SRP
-          for verification on the client side, although an error. It is
-          optional for the client to verify this as, on the server side, if the
+          for verification on the client side, It is
+          optional for the client to verify this because if the
           AppleTV detects an error, an HTTP 470 will be responded.</font></font><p
 
 class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p><pre
@@ -687,8 +691,8 @@ align="justify" lang="en-US">
 AppleTV
           responds with a body containing 96 bytes of data. Again, this is NOT
           a <b>plist</b>, but just plain binary. The first 32 bytes are an AppleTV
-          public key &lt;atv_pub&gt; and the remaining (usually 64 bytes) are
-          other Apple data &lt;atv_data&gt; to be used in next step.</font></font></p></font><p
+          public key &lt;atv_pub&gt; and the remaining bytes (usually 64) are
+          some data &lt;atv_data&gt; to be used in next step.</font></font></p></font><p
 
 class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p><pre
 
@@ -802,7 +806,7 @@ face="Segoe UI, sans-serif"><font style="font-size: 18pt" size="5"><b><font colo
 style="margin-bottom:0cm;margin-bottom:.0001pt;line-height:
 normal"><span style="font-size:10.0pt;font-family:&quot;Courier New&quot;;
 color:black;mso-ansi-language:EN-US" lang="EN-US">
-        </span></p><xmp>
+        </span><xmp>
 use strict;
 use strict;
 
@@ -1015,5 +1019,5 @@ if ($res->is_success) {
 } else {
 	say "FAILED";	
 }	
-        </xmp>
-         <p></p></font></body></html>
+			 </xmp>
+         </font></body></html>
