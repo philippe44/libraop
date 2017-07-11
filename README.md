@@ -42,4 +42,4 @@ ALAC codec is also needed from here: https://github.com/macosforge/alac
 
 It's largely inspired from https://github.com/chevil/raop2_play but limit the playback to pcm as it focuses on creating a library and optimizing AirPlay synchronization 
 
-Since iOS 10.2, pairing is required with AppleTV. Here is a dsecription of the protocol https://htmlpreview.github.io/?https://github.com/philippe44/RAOP-Player/blob/master/doc/auth_protocol.html
+Since iOS 10.2, pairing is required with AppleTV. Here is a description of the protocol https://htmlpreview.github.io/?https://github.com/philippe44/RAOP-Player/blob/master/doc/auth_protocol.html
