@@ -36,7 +36,9 @@ the same audio file, or use the -ntp option to get NTP to be written to a file a
 raop_play
 
 Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile. You need some libraires:
+
 	- ALAC codec: https://github.com/macosforge/alac and
+	
 	- Curve25519 crypto: https://github.com/msotoodeh/curve25519
 
 You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32
