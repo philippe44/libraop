@@ -902,9 +902,11 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 		token = strtok(NULL,delimiters);
 	}
 
-	if (!p->rtp_ports.audio.rport || !p->rtp_ports.ctrl.rport || !p->rtp_ports.time.rport) {
+	if (!p->rtp_ports.audio.rport || !p->rtp_ports.ctrl.rport) {
 		LOG_ERROR("[%p]: missing a RTP port in response", p);
 		rc = false;
+	} else if (!p->rtp_ports.time.rport) {
+		LOG_INFO("[%p]: missing timing port, will get it later", p);
 	}
 
 	return rc;
