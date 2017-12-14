@@ -914,7 +914,7 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec)
+bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec, bool set_volume)
 {
 	struct {
 		__u32 sid;
@@ -1022,7 +1022,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	if (p->state == RAOP_DOWN) p->state = RAOP_FLUSHED;
 	pthread_mutex_unlock(&p->mutex);
 
-	if (((p->volume >= -30 && p->volume <= 0) || p->volume == -144.0) && !raopcl_set_volume(p, p->volume)) goto erexit;
+	if (set_volume && ((p->volume >= -30 && p->volume <= 0) || p->volume == -144.0) && !raopcl_set_volume(p, p->volume)) goto erexit;
 
 	if (sac) free(sac);
 	return true;
@@ -1094,7 +1094,7 @@ bool raopcl_disconnect(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_repair(struct raopcl_s *p)
+bool raopcl_repair(struct raopcl_s *p, bool set_volume)
 {
 	bool rc = true;
 
@@ -1112,7 +1112,7 @@ bool raopcl_repair(struct raopcl_s *p)
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
 
 	// this will put us again in FLUSHED state
-	rc &= raopcl_connect(p, p->host_addr, p->rtsp_port, p->codec);
+	rc &= raopcl_connect(p, p->host_addr, p->rtsp_port, p->codec, set_volume);
 
 	return rc;
 }

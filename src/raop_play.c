@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
 	player.hostent = gethostbyname(player.name);
 	memcpy(&player.addr.s_addr, player.hostent->h_addr_list[0], player.hostent->h_length);
 
-	if (!raopcl_connect(raopcl, player.addr, port, RAOP_ALAC)) {
+	if (!raopcl_connect(raopcl, player.addr, port, RAOP_ALAC, true)) {
 		raopcl_destroy(raopcl);
 		free(raopcl);
 		LOG_ERROR("Cannot connect to AirPlay device %s, check firewall",

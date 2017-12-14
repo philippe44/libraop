@@ -144,8 +144,8 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);
-bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec);
-bool 	raopcl_repair(struct raopcl_s *p);
+bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec, bool set_volume);
+bool 	raopcl_repair(struct raopcl_s *p, bool set_volume);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
 
