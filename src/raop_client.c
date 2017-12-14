@@ -728,6 +728,8 @@ bool raopcl_set_volume(struct raopcl_s *p, float vol)
 
 	if (!p) return false;
 
+	if ((vol < -30 || vol > 0) && vol != -144.0) return false;
+
 	p->volume = vol;
 
 	if (!p->rtspcl || p->state < RAOP_FLUSHED) return true;
@@ -1022,7 +1024,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	if (p->state == RAOP_DOWN) p->state = RAOP_FLUSHED;
 	pthread_mutex_unlock(&p->mutex);
 
-	if (set_volume && ((p->volume >= -30 && p->volume <= 0) || p->volume == -144.0) && !raopcl_set_volume(p, p->volume)) goto erexit;
+	if (set_volume) raopcl_set_volume(p, p->volume);
 
 	if (sac) free(sac);
 	return true;
