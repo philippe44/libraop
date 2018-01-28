@@ -80,6 +80,7 @@ int SendARP(in_addr_t src, in_addr_t dst, u8_t mac[], u32_t *size);
 char *strlwr(char *str);
 #define _random(x) random()
 char *GetTempPath(u16_t size, char *path);
+#define closesocket close
 
 #endif
 

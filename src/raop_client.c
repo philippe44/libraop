@@ -713,9 +713,9 @@ static void _raopcl_terminate_rtp(struct raopcl_s *p)
 	p->time_running = false;
 	pthread_join(p->time_thread, NULL);
 
-	if (p->rtp_ports.ctrl.fd != -1) close(p->rtp_ports.ctrl.fd);
-	if (p->rtp_ports.time.fd != -1) close(p->rtp_ports.time.fd);
-	if (p->rtp_ports.audio.fd != -1) close(p->rtp_ports.audio.fd);
+	if (p->rtp_ports.ctrl.fd != -1) closesocket(p->rtp_ports.ctrl.fd);
+	if (p->rtp_ports.time.fd != -1) closesocket(p->rtp_ports.time.fd);
+	if (p->rtp_ports.audio.fd != -1) closesocket(p->rtp_ports.audio.fd);
 
 	p->rtp_ports.ctrl.fd = p->rtp_ports.time.fd = p->rtp_ports.audio.fd = -1;
 }

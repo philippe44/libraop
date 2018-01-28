@@ -94,7 +94,7 @@ int open_tcp_socket(struct in_addr host, unsigned short *port)
 #endif
 
 	if (!bind_host(sd, host, port)) {
-		close(sd);
+		closesocket(sd);
 		return -1;
 	}
 
@@ -114,7 +114,7 @@ int open_udp_socket(struct in_addr host, unsigned short *port, bool blocking)
 		return -1;
 	}
 	if (!bind_host(sd, host, port)) {
-		close(sd);
+		closesocket(sd);
 		return -1;
 	}
 	return sd;
