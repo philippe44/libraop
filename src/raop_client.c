@@ -50,10 +50,10 @@
 #define VOLUME_MIN -30
 #define VOLUME_MAX 0
 
-#define SEC(ntp) ((__u32) ((ntp) >> 32))
-#define FRAC(ntp) ((__u32) (ntp))
+#define SEC(ntp) ((u32_t) ((ntp) >> 32))
+#define FRAC(ntp) ((u32_t) (ntp))
 #define SECNTP(ntp) SEC(ntp),FRAC(ntp)
-#define MSEC(ntp)  ((__u32) ((((ntp) >> 16)*1000) >> 16))
+#define MSEC(ntp)  ((u32_t) ((((ntp) >> 16)*1000) >> 16))
 
 /*
  --- timestamps (ts), millisecond (ms) and network time protocol (ntp) ---
@@ -119,7 +119,7 @@
 
 typedef struct {
 	rtp_header_t hdr;
-	__u32 dummy;
+	u32_t dummy;
 	ntp_t ref_time;
 	ntp_t recv_time;
 	ntp_t send_time;
@@ -131,8 +131,8 @@
 
 typedef struct {
 	rtp_header_t hdr;
-	__u16 seq_number;
-	__u16 n;
+	u16_t seq_number;
+	u16_t n;
 #if WIN
 } rtp_lost_pkt_t;
 #else
@@ -148,15 +148,15 @@ typedef struct raopcl_s {
 		struct { unsigned int avail, select, send; } audio;
 	} sane;
 	unsigned int retransmit;
-	__u8 iv[16]; // initialization vector for aes-cbc
-	__u8 nv[16]; // next vector for aes-cbc
-	__u8 key[16]; // key for aes-cbc
+	u8_t iv[16]; // initialization vector for aes-cbc
+	u8_t nv[16]; // next vector for aes-cbc
+	u8_t key[16]; // key for aes-cbc
 	struct in_addr	host_addr, local_addr;
-	__u16 rtsp_port;
+	u16_t rtsp_port;
 	rtp_port_t	rtp_ports;
 	struct {
-		__u16 seq_number;
-		__u64 timestamp;
+		u16_t seq_number;
+		u64_t timestamp;
 		int	size;
 		u8_t *buffer;
 	} backlog[MAX_BACKLOG];
@@ -166,11 +166,11 @@ typedef struct raopcl_s {
 	int size_in_aex;
 	bool encrypt;
 	bool first_pkt;
-	__u64 head_ts, pause_ts, start_ts, first_ts;
+	u64_t head_ts, pause_ts, start_ts, first_ts;
 	bool flushing;
-	__u16   seq_number;
+	u16_t   seq_number;
 	unsigned long ssrc;
-	__u32 latency_frames;
+	u32_t latency_frames;
 	int chunk_len;
 	pthread_t time_thread, ctrl_thread;
 	pthread_mutex_t mutex;
@@ -205,7 +205,7 @@ raop_state_t raopcl_state(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-__u32 raopcl_latency(struct raopcl_s *p)
+u32_t raopcl_latency(struct raopcl_s *p)
 {
 	if (!p) return 0;
 
@@ -215,7 +215,7 @@ __u32 raopcl_latency(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-__u32 raopcl_sample_rate(struct raopcl_s *p)
+u32_t raopcl_sample_rate(struct raopcl_s *p)
 {
 	if (!p) return 0;
 
@@ -224,11 +224,11 @@ __u32 raopcl_sample_rate(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-__u64 raopcl_time32_to_ntp(__u32 time)
+u64_t raopcl_time32_to_ntp(u32_t time)
 {
-	__u64 ntp_ms = ((get_ntp(NULL) >> 16) * 1000) >> 16;
-	__u32 ms = (__u32) ntp_ms;
-	__u64 res;
+	u64_t ntp_ms = ((get_ntp(NULL) >> 16) * 1000) >> 16;
+	u32_t ms = (u32_t) ntp_ms;
+	u64_t res;
 
 	/*
 	 Received time is supposed to be derived from an NTP in a form of
@@ -274,7 +274,7 @@ bool raopcl_is_sane(struct raopcl_s *p)
 /*----------------------------------------------------------------------------*/
 bool raopcl_is_playing(struct raopcl_s *p)
 {
-	__u64 now_ts = NTP2TS(get_ntp(NULL), p->sample_rate);
+	u64_t now_ts = NTP2TS(get_ntp(NULL), p->sample_rate);
 
 	if (!p) return false;
 
@@ -284,11 +284,11 @@ bool raopcl_is_playing(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-static int rsa_encrypt(__u8 *text, int len, __u8 *res)
+static int rsa_encrypt(u8_t *text, int len, u8_t *res)
 {
 	RSA *rsa;
-	__u8 modules[256];
-	__u8 exponent[8];
+	u8_t modules[256];
+	u8_t exponent[8];
 	int size;
 	char n[] =
 			"59dE8qLieItsH1WgjrcFRKj6eUWqi+bGLOX1HL3U3GhC/j0Qg90u3sG/1CUtwC"
@@ -311,9 +311,9 @@ static int rsa_encrypt(__u8 *text, int len, __u8 *res)
 }
 
 /*----------------------------------------------------------------------------*/
-static int raopcl_encrypt(raopcl_data_t *raopcld, __u8 *data, int size)
+static int raopcl_encrypt(raopcl_data_t *raopcld, u8_t *data, int size)
 {
-	__u8 *buf;
+	u8_t *buf;
 	int i=0,j;
 	memcpy(raopcld->nv,raopcld->iv,16);
 	while(i+16<=size){
@@ -325,7 +325,7 @@ static int raopcl_encrypt(raopcl_data_t *raopcld, __u8 *data, int size)
 	}
 #if 0
 	if(i<size){
-		__u8 tmp[16];
+		u8_t tmp[16];
 		LOG_INFO("[%p]: a block less than 16 bytes(%d) is not encrypted", raopcld, size-i);
 		memset(tmp,0,16);
 		memcpy(tmp,data+i,size-i);
@@ -357,7 +357,7 @@ void raopcl_pause(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_start_at(struct raopcl_s *p, __u64 start_time)
+bool raopcl_start_at(struct raopcl_s *p, u64_t start_time)
 {
 	if (!p) return false;
 
@@ -391,7 +391,7 @@ void raopcl_stop(struct raopcl_s *p)
 bool raopcl_accept_frames(struct raopcl_s *p)
 {
 	bool accept = false, first_pkt = false;
-	__u64 now_ts;
+	u64_t now_ts;
 
 	if (!p) return 0;
 
@@ -399,7 +399,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 
 	// a flushing is pending
 	if (p->flushing) {
-		__u64 now = get_ntp(NULL);
+		u64_t now = get_ntp(NULL);
 
 		now_ts = NTP2TS(now, p->sample_rate);
 
@@ -423,7 +423,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 			LOG_INFO("[%p]: restarting w/o pause n:%u.%u, hts:%Lu", p, SECNTP(now), p->head_ts);
 		}
 		else {
-			__u16 n, i, chunks = raopcl_latency(p) / p->chunk_len;
+			u16_t n, i, chunks = raopcl_latency(p) / p->chunk_len;
 
 			// if un-pausing w/o start_time, can anticipate as we have buffer
 			p->first_ts = p->start_ts ? p->start_ts : now_ts - raopcl_latency(p);
@@ -446,7 +446,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 			// re-send old packets
 			for (i = 0; i < chunks; i++) {
 				rtp_audio_pkt_t *packet;
-				__u16 reindex, index = (n + i) % MAX_BACKLOG;
+				u16_t reindex, index = (n + i) % MAX_BACKLOG;
 
 				if (!p->backlog[index].buffer) continue;
 
@@ -494,13 +494,13 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int frames, __u64 *playtime)
+bool raopcl_send_chunk(struct raopcl_s *p, u8_t *sample, int frames, u64_t *playtime)
 {
 	u8_t *encoded, *buffer;
 	rtp_audio_pkt_t *packet;
 	size_t n;
 	int size;
-	__u64 now = get_ntp(NULL);
+	u64_t now = get_ntp(NULL);
 
 	if (!p || !sample) {
 		LOG_ERROR("[%p]: something went wrong (s:%p)", p, sample);
@@ -751,17 +751,17 @@ float raopcl_float_volume(int vol)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration)
+bool raopcl_set_progress_ms(struct raopcl_s *p, u32_t elapsed, u32_t duration)
 {
 	return raopcl_set_progress(p, MS2NTP(elapsed), MS2NTP(duration));
 }
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 duration)
+bool raopcl_set_progress(struct raopcl_s *p, u64_t elapsed, u64_t duration)
 {
 	char a[128];
-	__u64 start, end, now;
+	u64_t start, end, now;
 
 	if (!p || !p->rtspcl || p->state < RAOP_STREAMING) return false;
 
@@ -769,7 +769,7 @@ bool raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 duration)
 	start = now - NTP2TS(elapsed, p->sample_rate);
 	end = duration ? start + NTP2TS(duration, p->sample_rate) : now;
 
-	sprintf(a, "progress: %u/%u/%u\r\n", (__u32) start, (__u32) now, (__u32) end);
+	sprintf(a, "progress: %u/%u/%u\r\n", (u32_t) start, (u32_t) now, (u32_t) end);
 
 	return rtspcl_set_parameter(p->rtspcl, a);
 }
@@ -831,7 +831,7 @@ static bool raopcl_set_sdp(struct raopcl_s *p, char *sdp)
 	switch (p->crypto ) {
 		case RAOP_RSA: {
 			char *key = NULL, *iv = NULL, *buf;
-			__u8 rsakey[512];
+			u8_t rsakey[512];
 			int i;
 
 			i = rsa_encrypt(p->key, 16, rsakey);
@@ -916,12 +916,12 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec, bool set_volume)
+bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, raop_codec_t codec, bool set_volume)
 {
 	struct {
-		__u32 sid;
-		__u64 sci;
-		__u8 sac[16];
+		u32_t sid;
+		u64_t sci;
+		u8_t sac[16];
 	} seed;
 	char sid[10+1], sci[16+1];
 	char *sac = NULL;
@@ -939,14 +939,14 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	if (codec != RAOP_NOCODEC) p->codec = codec;
 	if (destport != 0) p->rtsp_port = destport;
 
-	RAND_bytes((__u8*) &p->ssrc, sizeof(p->ssrc));
+	RAND_bytes((u8_t*) &p->ssrc, sizeof(p->ssrc));
 	VALGRIND_MAKE_MEM_DEFINED(&p->ssrc, sizeof(p->ssrc));
 
 	p->encrypt = (p->crypto != RAOP_CLEAR);
 	memset(&p->sane, 0, sizeof(p->sane));
 	p->retransmit = 0;
 
-	RAND_bytes((__u8*) &seed, sizeof(seed));
+	RAND_bytes((u8_t*) &seed, sizeof(seed));
 	VALGRIND_MAKE_MEM_DEFINED(&seed, sizeof(seed));
 	sprintf(sid, "%010lu", (long unsigned int) seed.sid);
 	sprintf(sci, "%016llx", (long long int) seed.sci);
@@ -1012,7 +1012,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 	if (kd_lookup(kd, "Audio-Latency")) {
 		int latency = atoi(kd_lookup(kd, "Audio-Latency"));
 
-		p->latency_frames = max((__u32) latency, p->latency_frames);
+		p->latency_frames = max((u32_t) latency, p->latency_frames);
 	}
 	free_kd(kd);
 
@@ -1042,8 +1042,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, rao
 bool raopcl_flush(struct raopcl_s *p)
 {
 	bool rc;
-	__u16 seq_number;
-	__u32 timestamp;
+	u16_t seq_number;
+	u32_t timestamp;
 
 	if (!p || p->state != RAOP_STREAMING) return false;
 
@@ -1168,7 +1168,7 @@ void _raopcl_send_sync(struct raopcl_s *raopcld, bool first)
 {
 	struct sockaddr_in addr;
 	rtp_sync_pkt_t rsp;
-	__u64 now, timestamp;
+	u64_t now, timestamp;
 	int n;
 
 	addr.sin_family = AF_INET;

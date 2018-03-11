@@ -26,8 +26,8 @@ struct alac_codec_s;
 extern "C" {
 #endif
 
-bool pcm_to_alac(struct alac_codec_s *codec, __u8 *in, int frames, __u8 **out, int *size);
-bool pcm_to_alac_fast(__u8 *in, int frames, __u8 **out, int *size, int bsize);
+bool pcm_to_alac(struct alac_codec_s *codec, u8_t *in, int frames, u8_t **out, int *size);
+bool pcm_to_alac_fast(u8_t *in, int frames, u8_t **out, int *size, int bsize);
 struct alac_codec_s *alac_create_codec(int chunk_len, int sampleRate, int sampleSize, int channels);
 void alac_destroy_codec(struct alac_codec_s *codec);
 #ifdef __cplusplus

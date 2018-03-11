@@ -110,9 +110,9 @@ bool rtspcl_is_sane(struct rtspcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, __u16 destport, char *sid)
+bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, u16_t destport, char *sid)
 {
-	__u16 myport=0;
+	u16_t myport=0;
 	struct sockaddr_in name;
 	socklen_t namelen = sizeof(name);
 
@@ -283,7 +283,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_record(struct rtspcl_s *p, __u16 start_seq, __u32 start_ts, key_data_t *rkd)
+bool rtspcl_record(struct rtspcl_s *p, u16_t start_seq, u32_t start_ts, key_data_t *rkd)
 {
 	bool rc;
 	key_data_t hds[3];
@@ -319,7 +319,7 @@ bool rtspcl_set_parameter(struct rtspcl_s *p, char *param)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_artwork(struct rtspcl_s *p, __u32 timestamp, char *content_type, int size, char *image)
+bool rtspcl_set_artwork(struct rtspcl_s *p, u32_t timestamp, char *content_type, int size, char *image)
 {
 	key_data_t hds[2];
 	char rtptime[20];
@@ -337,7 +337,7 @@ bool rtspcl_set_artwork(struct rtspcl_s *p, __u32 timestamp, char *content_type,
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list args)
+bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list args)
 {
 	key_data_t hds[2];
 	char rtptime[20];
@@ -364,7 +364,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, __u32 timestamp, int count, va_list arg
 
 	while (count-- && (q-str) < 1024) {
 		char *fmt, type;
-		__u32 size;
+		u32_t size;
 
 		fmt = va_arg(args, char*);
 		type = (char) va_arg(args, int);
@@ -411,15 +411,15 @@ bool rtspcl_options(struct rtspcl_s *p)
 /*----------------------------------------------------------------------------*/
 bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 {
-	__u8 auth_pub[ed25519_public_key_size], auth_priv[ed25519_private_key_size];
-	__u8 verify_pub[ed25519_public_key_size], verify_secret[ed25519_secret_key_size];
-	__u8 atv_pub[ed25519_public_key_size], *atv_data;
-	__u8 secret[ed25519_secret_key_size], shared_secret[ed25519_secret_key_size];
-	__u8 *buf, *content;
+	u8_t auth_pub[ed25519_public_key_size], auth_priv[ed25519_private_key_size];
+	u8_t verify_pub[ed25519_public_key_size], verify_secret[ed25519_secret_key_size];
+	u8_t atv_pub[ed25519_public_key_size], *atv_data;
+	u8_t secret[ed25519_secret_key_size], shared_secret[ed25519_secret_key_size];
+	u8_t *buf, *content;
 	int atv_len, len;
 	SHA512_CTX digest;
-	__u8 signed_keys[ed25519_signature_size];
-	__u8 aes_key[16], aes_iv[16];
+	u8_t signed_keys[ed25519_signature_size];
+	u8_t aes_key[16], aes_iv[16];
 	aes_ctr_context ctx;
 	bool rc = true;
 
@@ -494,7 +494,7 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_flush(struct rtspcl_s *p, __u16 seq_number, __u32 timestamp)
+bool rtspcl_flush(struct rtspcl_s *p, u16_t seq_number, u32_t timestamp)
 {
 	bool rc;
 	key_data_t hds[2];

@@ -36,15 +36,15 @@ typedef struct alac_codec_s {
 
 /*----------------------------------------------------------------------------*/
 // assumes stereo and little endian
-extern "C" bool pcm_to_alac_fast(__u8 *sample, int frames, __u8 **out, int *size, int bsize)
+extern "C" bool pcm_to_alac_fast(u8_t *sample, int frames, u8_t **out, int *size, int bsize)
 {
-	__u8 *p;
-	__u32 *in = (__u32*) sample;
+	u8_t *p;
+	u32_t *in = (u32_t*) sample;
 	int count;
 
 	frames = min(frames, bsize);
 
-	*out = (__u8*) malloc(bsize * 4 + 16);
+	*out = (u8_t*) malloc(bsize * 4 + 16);
 	p = *out;
 
 	*p++ = (1 << 5);
@@ -97,11 +97,11 @@ extern "C" bool pcm_to_alac_fast(__u8 *sample, int frames, __u8 **out, int *size
 
 /*----------------------------------------------------------------------------*/
 // assumes stereo and little endian
-extern "C" bool pcm_to_alac(struct alac_codec_s *codec, __u8 *in, int frames, __u8 **out, int *size)
+extern "C" bool pcm_to_alac(struct alac_codec_s *codec, u8_t *in, int frames, u8_t **out, int *size)
 {
 	*size = min(frames, (int) codec->outputFormat.mFramesPerPacket) * codec->inputFormat.mBytesPerFrame;
 	// seems that ALAC has a bug and creates more data than expected
-	*out = (__u8*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 8);
+	*out = (u8_t*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 8);
 	codec->encoder->Encode(codec->inputFormat, codec->outputFormat, in, *out, size);
 
 	return true;

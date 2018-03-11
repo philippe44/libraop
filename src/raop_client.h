@@ -78,14 +78,14 @@
 #define SECRET_SIZE				64
 
 #define NTP2MS(ntp) ((((ntp) >> 10) * 1000L) >> 22)
-#define MS2NTP(ms) (((((__u64) (ms)) << 22) / 1000) << 10)
+#define MS2NTP(ms) (((((u64_t) (ms)) << 22) / 1000) << 10)
 #define TIME_MS2NTP(time) raopcl_time32_to_ntp(time)
 #define NTP2TS(ntp, rate) ((((ntp) >> 16) * (rate)) >> 16)
-#define TS2NTP(ts, rate)  (((((__u64) (ts)) << 16) / (rate)) << 16)
-#define MS2TS(ms, rate) ((((__u64) (ms)) * (rate)) / 1000)
+#define TS2NTP(ts, rate)  (((((u64_t) (ts)) << 16) / (rate)) << 16)
+#define MS2TS(ms, rate) ((((u64_t) (ms)) * (rate)) / 1000)
 #define TS2MS(ts, rate) NTP2MS(TS2NTP(ts,rate))
 
-typedef struct raopcl_t {__u32 dummy;} raopcl_t;
+typedef struct raopcl_t {u32_t dummy;} raopcl_t;
 
 struct raopcl_s;
 
@@ -107,9 +107,9 @@ typedef struct {
 } raop_settings_t;
 
 typedef struct {
-	__u8 proto;
-	__u8 type;
-	__u8 seq[2];
+	u8_t proto;
+	u8_t type;
+	u8_t seq[2];
 #if WIN
 } rtp_header_t;
 #else
@@ -118,9 +118,9 @@ typedef struct {
 
 typedef struct {
 	rtp_header_t hdr;
-	__u32 	rtp_timestamp_latency;
+	u32_t 	rtp_timestamp_latency;
 	ntp_t   curr_time;
-	__u32   rtp_timestamp;
+	u32_t   rtp_timestamp;
 #if WIN
 } rtp_sync_pkt_t;
 #else
@@ -129,8 +129,8 @@ typedef struct {
 
 typedef struct {
 	rtp_header_t hdr;
-	__u32 timestamp;
-	__u32 ssrc;
+	u32_t timestamp;
+	u32_t ssrc;
 #if WIN
 } rtp_audio_pkt_t;
 #else
@@ -144,40 +144,40 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);
-bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, __u16 destport, raop_codec_t codec, bool set_volume);
+bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, raop_codec_t codec, bool set_volume);
 bool 	raopcl_repair(struct raopcl_s *p, bool set_volume);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
 
-bool 	raopcl_set_progress(struct raopcl_s *p, __u64 elapsed, __u64 end);
-bool 	raopcl_set_progress_ms(struct raopcl_s *p, __u32 elapsed, __u32 duration);
+bool 	raopcl_set_progress(struct raopcl_s *p, u64_t elapsed, u64_t end);
+bool 	raopcl_set_progress_ms(struct raopcl_s *p, u32_t elapsed, u32_t duration);
 bool 	raopcl_set_volume(struct raopcl_s *p, float vol);
 float 	raopcl_float_volume(int vol);
 bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
 bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
 
 bool 	raopcl_accept_frames(struct raopcl_s *p);
-bool	raopcl_send_chunk(struct raopcl_s *p, __u8 *sample, int size, __u64 *playtime);
+bool	raopcl_send_chunk(struct raopcl_s *p, u8_t *sample, int size, u64_t *playtime);
 
-bool 	raopcl_start_at(struct raopcl_s *p, __u64 start_time);
+bool 	raopcl_start_at(struct raopcl_s *p, u64_t start_time);
 void 	raopcl_pause(struct raopcl_s *p);
 void 	raopcl_stop(struct raopcl_s *p);
 
 /*
 	The are thread safe
 */
-__u32 	raopcl_latency(struct raopcl_s *p);
-__u32 	raopcl_sample_rate(struct raopcl_s *p);
+u32_t 	raopcl_latency(struct raopcl_s *p);
+u32_t 	raopcl_sample_rate(struct raopcl_s *p);
 raop_state_t raopcl_state(struct raopcl_s *p);
-__u32 	raopcl_queue_len(struct raopcl_s *p);
+u32_t 	raopcl_queue_len(struct raopcl_s *p);
 
-__u32 	raopcl_queued_frames(struct raopcl_s *p);
+u32_t 	raopcl_queued_frames(struct raopcl_s *p);
 
 bool 	raopcl_is_sane(struct raopcl_s *p);
 bool 	raopcl_is_connected(struct raopcl_s *p);
 bool 	raopcl_is_playing(struct raopcl_s *p);
 bool 	raopcl_sanitize(struct raopcl_s *p);
 
-__u64 	raopcl_time32_to_ntp(__u32 time);
+u64_t 	raopcl_time32_to_ntp(u32_t time);
 
 #endif

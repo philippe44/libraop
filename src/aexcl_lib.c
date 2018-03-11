@@ -275,7 +275,7 @@ int remove_char_from_string(char *str, char rc)
  * transform an hex string (into an array or bytes)
  * return the number of deleted characters
  */
-int hex2bytes(char *hex, __u8 **bytes) {
+int hex2bytes(char *hex, u8_t **bytes) {
 	size_t i, len = strlen(hex) / 2;
 
 	if (!*bytes && (*bytes = malloc(len)) == NULL) return 0;

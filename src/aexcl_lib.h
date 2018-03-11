@@ -13,7 +13,7 @@
 
 #define MAX_KD 64
 
-#define GET_BIGENDIAN_INT(x) (*(__u8*)(x)<<24)|(*((__u8*)(x)+1)<<16)|(*((__u8*)(x)+2)<<8)|(*((__u8*)(x)+3))
+#define GET_BIGENDIAN_INT(x) (*(u8_t*)(x)<<24)|(*((u8_t*)(x)+1)<<16)|(*((u8_t*)(x)+2)<<8)|(*((u8_t*)(x)+3))
 
 
 typedef struct {
@@ -24,8 +24,8 @@ typedef struct {
 
 typedef struct sock_info_s {
 	int fd;
-	__u16 lport;
-	__u16 rport;
+	u16_t lport;
+	u16_t rport;
 } sock_info_t;
 
 
@@ -45,7 +45,7 @@ char *kd_lookup(key_data_t *kd, char *key);
 void free_kd(key_data_t *kd);
 int remove_char_from_string(char *str, char rc);
 char *_aprintf(const char *fmt, ...);
-int hex2bytes(char *hex, __u8 **bytes);
+int hex2bytes(char *hex, u8_t **bytes);
 
 
 #endif
