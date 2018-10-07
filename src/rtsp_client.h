@@ -36,6 +36,7 @@ bool rtspcl_is_connected(struct rtspcl_s *p);
 bool rtspcl_is_sane(struct rtspcl_s *p);
 bool rtspcl_options(struct rtspcl_s *p);
 bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret);
+bool rtspcl_auth_setup(struct rtspcl_s *p);
 bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp);
 bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *kd);
 bool rtspcl_record(struct rtspcl_s *p, u16_t start_seq, u32_t start_ts, key_data_t *kd);

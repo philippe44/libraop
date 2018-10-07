@@ -50,6 +50,12 @@
 #define VOLUME_MIN -30
 #define VOLUME_MAX 0
 
+#define MD_TEXT		0x01
+#define MD_ARTWORK	0x02
+#define MD_PROGRESS	0x04
+
+#define PUBKEY_SIZE	64
+
 #define SEC(ntp) ((u32_t) ((ntp) >> 32))
 #define FRAC(ntp) ((u32_t) (ntp))
 #define SECNTP(ntp) SEC(ntp),FRAC(ntp)
@@ -181,6 +187,8 @@ typedef struct raopcl_s {
 	raop_crypto_t crypto;
 	bool auth;
 	char secret[SECRET_SIZE + 1];
+	char pk[PUBKEY_SIZE + 1];
+	u8_t md_caps;
 } raopcl_data_t;
 
 
@@ -643,6 +651,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int chunk_len,
 							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
+							   char *pk, char *md,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
@@ -666,6 +675,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	raopcld->crypto = crypto;
 	raopcld->auth = auth;
 	if (secret) strncpy(raopcld->secret, secret, SECRET_SIZE);
+	if (pk) strncpy(raopcld->pk, pk, PUBKEY_SIZE);
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
 	raopcld->chunk_len = chunk_len;
 	strcpy(raopcld->DACP_id, DACP_id ? DACP_id : "");
@@ -673,6 +683,10 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	raopcld->local_addr = local;
 	raopcld->rtp_ports.ctrl.fd = raopcld->rtp_ports.time.fd = raopcld->rtp_ports.audio.fd = -1;
 	raopcld->seq_number = _random(0xffff);
+
+	if (md && strchr(md, '0')) raopcld->md_caps |= MD_TEXT;
+	if (md && strchr(md, '1')) raopcld->md_caps |= MD_ARTWORK;
+	if (md && strchr(md, '2')) raopcld->md_caps |= MD_PROGRESS;
 
 	// init RTSP if needed
 	if (((raopcld->rtspcl = rtspcl_create("iTunes/7.6.2 (Windows; N;)")) == NULL)) {
@@ -763,7 +777,7 @@ bool raopcl_set_progress(struct raopcl_s *p, u64_t elapsed, u64_t duration)
 	char a[128];
 	u64_t start, end, now;
 
-	if (!p || !p->rtspcl || p->state < RAOP_STREAMING) return false;
+	if (!p || !p->rtspcl || p->state < RAOP_STREAMING || !(p->md_caps & MD_PROGRESS)) return false;
 
 	now = NTP2TS(get_ntp(NULL), p->sample_rate);
 	start = now - NTP2TS(elapsed, p->sample_rate);
@@ -778,7 +792,7 @@ bool raopcl_set_progress(struct raopcl_s *p, u64_t elapsed, u64_t duration)
 /*----------------------------------------------------------------------------*/
 bool raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image)
 {
-	if (!p || !p->rtspcl || p->state < RAOP_FLUSHED) return false;
+	if (!p || !p->rtspcl || p->state < RAOP_FLUSHED || !(p->md_caps & MD_ARTWORK)) return false;
 
 	return rtspcl_set_artwork(p->rtspcl, p->head_ts, content_type, size, image);
 }
@@ -789,7 +803,7 @@ bool raopcl_set_daap(struct raopcl_s *p, int count, ...)
 {
 	va_list args;
 
-	if (!p || p->state < RAOP_FLUSHED) return false;
+	if (!p || p->state < RAOP_FLUSHED || !(p->md_caps & MD_TEXT)) return false;
 
 	va_start(args, count);
 
@@ -962,7 +976,12 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, rao
 	LOG_INFO("[%p]: local interface %s", p, rtspcl_local_ip(p->rtspcl));
 
 	// RTSP pairing verify
-	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
+	if (*p->secret) {
+		if (!rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
+	} else {
+		// Send pubkey (needed for AirPlay 2, not used)
+		if (*p->pk) rtspcl_auth_setup(p->rtspcl);
+	}
 
 	// build sdp parameter
 	buf = strdup(inet_ntoa(host));

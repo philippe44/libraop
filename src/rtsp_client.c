@@ -33,10 +33,6 @@
 #include "aexcl_lib.h"
 #include "rtsp_client.h"
 
-#if WIN
-#define poll WSAPoll
-#endif
-
 #define MAX_NUM_KD 20
 typedef struct rtspcl_s {
     int fd;
@@ -490,6 +486,40 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 	free(buf);
 
 	return rc;
+}
+
+
+/*----------------------------------------------------------------------------*/
+bool rtspcl_auth_setup(struct rtspcl_s *p)
+{
+	u8_t pub_key[ed25519_public_key_size], secret[ed25519_secret_key_size];
+	u8_t *buf, *rsp;
+	int rsp_len;
+
+	if (!p) return false;
+
+	// create a verification public key
+	RAND_bytes(secret, ed25519_secret_key_size);
+	VALGRIND_MAKE_MEM_DEFINED(secret, ed25519_secret_key_size);
+	curve25519_dh_CalculatePublicKey(pub_key, secret);
+
+
+	// POST the auth_pub and verify_pub concataned
+	buf = malloc(1 + ed25519_public_key_size);
+	memcpy(buf, "\x01", 1);
+	memcpy(buf + 1, pub_key, ed25519_public_key_size);
+
+	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf,
+					  ed25519_public_key_size+1, 1, NULL, NULL, (char**) &rsp, &rsp_len, "/auth-setup")) {
+		LOG_ERROR("[%p]: auth-setup failed", p);
+		free(buf);
+		return false;
+	}
+
+	free(buf);
+	free(rsp);
+
+	return true;
 }
 
 

@@ -24,10 +24,6 @@
 #include "platform.h"
 #include "aexcl_lib.h"
 
-#if WIN
-static int poll(struct pollfd *fds, unsigned long numfds, int timeout);
-#endif
-
 extern log_level	util_loglevel;
 static log_level	*loglevel = &util_loglevel;
 
@@ -57,7 +53,7 @@ char *_aprintf(const char *fmt, ...)
 
 #if WIN
 // this only implements numfds == 1
-static int poll(struct pollfd *fds, unsigned long numfds, int timeout) {
+int poll(struct pollfd *fds, unsigned long numfds, int timeout) {
 	fd_set r, w;
 	struct timeval tv;
 	int ret;

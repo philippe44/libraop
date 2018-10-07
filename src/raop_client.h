@@ -141,6 +141,7 @@ typedef struct {
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int frame_len,
 							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
+							   char *pk, char *md,
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);
