@@ -396,11 +396,11 @@ bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list arg
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_options(struct rtspcl_s *p)
+bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd)
 {
 	if(!p) return false;
 
-	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, NULL, NULL, NULL, "*");
+	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, rkd, NULL, NULL, "*");
 }
 
 

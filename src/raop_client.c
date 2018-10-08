@@ -975,12 +975,14 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, rao
 
 	LOG_INFO("[%p]: local interface %s", p, rtspcl_local_ip(p->rtspcl));
 
-	// RTSP pairing verify
 	if (*p->secret) {
+		// RTSP pairing verify for AppleTV
 		if (!rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
-	} else {
+	} else if (rtspcl_options(p->rtspcl, kd)) {
 		// Send pubkey (needed for AirPlay 2, not used)
-		if (*p->pk) rtspcl_auth_setup(p->rtspcl);
+		char *hdr = kd_lookup(kd, "Public");
+		if (hdr && strstr(hdr, "POST") && *p->pk) rtspcl_auth_setup(p->rtspcl);
+		free_kd(kd);
 	}
 
 	// build sdp parameter

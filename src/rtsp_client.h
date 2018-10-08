@@ -34,7 +34,7 @@ bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr hos
 bool rtspcl_disconnect(struct rtspcl_s *p);
 bool rtspcl_is_connected(struct rtspcl_s *p);
 bool rtspcl_is_sane(struct rtspcl_s *p);
-bool rtspcl_options(struct rtspcl_s *p);
+bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd);
 bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret);
 bool rtspcl_auth_setup(struct rtspcl_s *p);
 bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp);
