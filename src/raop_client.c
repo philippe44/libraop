@@ -187,7 +187,7 @@ typedef struct raopcl_s {
 	raop_crypto_t crypto;
 	bool auth;
 	char secret[SECRET_SIZE + 1];
-	char pk[PUBKEY_SIZE + 1];
+	char et[16];
 	u8_t md_caps;
 } raopcl_data_t;
 
@@ -651,7 +651,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
 							   raop_codec_t codec, bool alac_encode, int chunk_len,
 							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
-							   char *pk, char *md,
+							   char *et, char *md,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
@@ -675,7 +675,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	raopcld->crypto = crypto;
 	raopcld->auth = auth;
 	if (secret) strncpy(raopcld->secret, secret, SECRET_SIZE);
-	if (pk) strncpy(raopcld->pk, pk, PUBKEY_SIZE);
+	if (et) strncpy(raopcld->et, et, 16);
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
 	raopcld->chunk_len = chunk_len;
 	strcpy(raopcld->DACP_id, DACP_id ? DACP_id : "");
@@ -975,15 +975,11 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, rao
 
 	LOG_INFO("[%p]: local interface %s", p, rtspcl_local_ip(p->rtspcl));
 
-	if (*p->secret) {
-		// RTSP pairing verify for AppleTV
-		if (!rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
-	} else if (rtspcl_options(p->rtspcl, kd)) {
-		// Send pubkey (needed for AirPlay 2, not used)
-		char *hdr = kd_lookup(kd, "Public");
-		if (hdr && strstr(hdr, "POST") && *p->pk) rtspcl_auth_setup(p->rtspcl);
-		free_kd(kd);
-	}
+	// RTSP pairing verify for AppleTV
+	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
+
+	// Send pubkey for MFi devices
+	if (strchr(p->et, '4')) rtspcl_auth_setup(p->rtspcl);
 
 	// build sdp parameter
 	buf = strdup(inet_ntoa(host));
