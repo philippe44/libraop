@@ -23,28 +23,74 @@
 #include <string.h>
 
 #include "ALACEncoder.h"
+#include "ALACDecoder.h"
+#include "ALACBitUtilities.h"
 
-#include "platform.h"
 #include "alac_wrapper.h"
 
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 
 typedef struct alac_codec_s {
 	AudioFormatDescription inputFormat, outputFormat;
 	ALACEncoder *encoder;
+	ALACDecoder *Decoder;
+	unsigned block_size, frames_per_packet;
 } alac_codec_t;
+
+/*----------------------------------------------------------------------------*/
+extern "C" struct alac_codec_s *alac_create_decoder(int magic_cookie_size, unsigned char *magic_cookie,
+											unsigned char *sample_size, unsigned *sample_rate,
+											unsigned char *channels) {
+	struct alac_codec_s *codec = (struct alac_codec_s*) malloc(sizeof(struct alac_codec_s));
+
+	codec->Decoder = new ALACDecoder;
+	codec->Decoder->Init(magic_cookie, magic_cookie_size);
+
+	*channels = codec->Decoder->mConfig.numChannels;
+	*sample_rate = codec->Decoder->mConfig.sampleRate;
+	*sample_size = codec->Decoder->mConfig.bitDepth;
+
+	codec->frames_per_packet = codec->Decoder->mConfig.frameLength;
+	codec->block_size = codec->frames_per_packet * (*channels) * (*sample_size) / 8;
+
+	return codec;
+}
+
+/*----------------------------------------------------------------------------*/
+extern "C" void alac_delete_decoder(struct alac_codec_s *codec) {
+	delete (ALACDecoder*) codec->Decoder;
+	free(codec);
+}
+
+
+/*----------------------------------------------------------------------------*/
+
+extern "C" bool alac_to_pcm(struct alac_codec_s *codec, unsigned char* input,
+
+							unsigned char *output, char channels, unsigned *out_frames) {
+
+	BitBuffer input_buffer;
+
+
+	BitBufferInit(&input_buffer, input, codec->block_size);
+
+	return codec->Decoder->Decode(&input_buffer, output, codec->frames_per_packet, channels, out_frames) == ALAC_noErr;
+
+}
 
 
 /*----------------------------------------------------------------------------*/
 // assumes stereo and little endian
-extern "C" bool pcm_to_alac_fast(u8_t *sample, int frames, u8_t **out, int *size, int bsize)
+extern "C" bool pcm_to_alac_fast(uint8_t *sample, int frames, uint8_t **out, int *size, int bsize)
 {
-	u8_t *p;
-	u32_t *in = (u32_t*) sample;
+	uint8_t *p;
+	uint32_t *in = (uint32_t*) sample;
 	int count;
 
 	frames = min(frames, bsize);
 
-	*out = (u8_t*) malloc(bsize * 4 + 16);
+	*out = (uint8_t*) malloc(bsize * 4 + 16);
 	p = *out;
 
 	*p++ = (1 << 5);
@@ -97,11 +143,11 @@ extern "C" bool pcm_to_alac_fast(u8_t *sample, int frames, u8_t **out, int *size
 
 /*----------------------------------------------------------------------------*/
 // assumes stereo and little endian
-extern "C" bool pcm_to_alac(struct alac_codec_s *codec, u8_t *in, int frames, u8_t **out, int *size)
+extern "C" bool pcm_to_alac(struct alac_codec_s *codec, uint8_t *in, int frames, uint8_t **out, int *size)
 {
 	*size = min(frames, (int) codec->outputFormat.mFramesPerPacket) * codec->inputFormat.mBytesPerFrame;
 	// seems that ALAC has a bug and creates more data than expected
-	*out = (u8_t*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 8);
+	*out = (uint8_t*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 8);
 	codec->encoder->Encode(codec->inputFormat, codec->outputFormat, in, *out, size);
 
 	return true;
@@ -110,7 +156,7 @@ extern "C" bool pcm_to_alac(struct alac_codec_s *codec, u8_t *in, int frames, u8
 #define kTestFormatFlag_16BitSourceData 1
 
 /*----------------------------------------------------------------------------*/
-extern "C" struct alac_codec_s *alac_create_codec(int chunk_len, int sampleRate, int sampleSize, int channels)
+extern "C" struct alac_codec_s *alac_create_encoder(int chunk_len, int sampleRate, int sampleSize, int channels)
 {
 	alac_codec_t *codec;
 
@@ -152,7 +198,7 @@ extern "C" struct alac_codec_s *alac_create_codec(int chunk_len, int sampleRate,
 
 
 /*----------------------------------------------------------------------------*/
-extern "C" void alac_destroy_codec(struct alac_codec_s *codec)
+extern "C" void alac_delete_encoder(struct alac_codec_s *codec)
 {
 	delete codec->encoder;
 	free(codec);

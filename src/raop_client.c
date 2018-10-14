@@ -695,7 +695,7 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 		return NULL;
 	}
 
-	if (alac_encode && (raopcld->alac_codec = alac_create_codec(raopcld->chunk_len, sample_rate, sample_size, channels)) == NULL) {
+	if (alac_encode && (raopcld->alac_codec = alac_create_encoder(raopcld->chunk_len, sample_rate, sample_size, channels)) == NULL) {
 		LOG_WARN("[%p]: cannot create ALAC codec", raopcld);
 	}
 
@@ -1155,7 +1155,7 @@ bool raopcl_destroy(struct raopcl_s *p)
 		}
 	}
 
-	if (p->alac_codec) alac_destroy_codec(p->alac_codec);
+	if (p->alac_codec) alac_delete_encoder(p->alac_codec);
 
 	free(p);
 

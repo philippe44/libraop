@@ -26,10 +26,17 @@ struct alac_codec_s;
 extern "C" {
 #endif
 
-bool pcm_to_alac(struct alac_codec_s *codec, u8_t *in, int frames, u8_t **out, int *size);
-bool pcm_to_alac_fast(u8_t *in, int frames, u8_t **out, int *size, int bsize);
-struct alac_codec_s *alac_create_codec(int chunk_len, int sampleRate, int sampleSize, int channels);
-void alac_destroy_codec(struct alac_codec_s *codec);
+struct alac_codec_s *alac_create_decoder(int magic_cookie_size, uint8_t *magic_cookie,
+								uint8_t *sample_size, unsigned *sample_rate,
+								uint8_t *channels);
+void alac_delete_decoder(struct alac_codec_s *codec);
+bool alac_to_pcm(struct alac_codec_s *codec, uint8_t* input,
+				 uint8_t *output, char channels, unsigned *out_frames);
+
+bool pcm_to_alac(struct alac_codec_s *codec, uint8_t *in, int frames, uint8_t **out, int *size);
+bool pcm_to_alac_fast(uint8_t *in, int frames, uint8_t **out, int *size, int bsize);
+struct alac_codec_s *alac_create_encoder(int chunk_len, int sampleRate, int sampleSize, int channels);
+void alac_delete_encoder(struct alac_codec_s *codec);
 #ifdef __cplusplus
 }
 #endif

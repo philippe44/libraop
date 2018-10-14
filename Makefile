@@ -1,3 +1,14 @@
+OS 			:= $(shell uname)
+CFLAGS 		+= -Wno-multichar -fdata-sections -ffunction-sections 
+
+ifeq ($(OS),Darwin)
+LINKSTATIC	=
+LDFLAGS 	+= -Wl,-dead_strip
+else
+LINKSTATIC 	= -static
+LDFLAGS 	+= -Wl,--gc-sections
+endif
+
 TOOLS		= ./tools
 VALGRIND	= ../valgrind
 ALAC		= ../alac
