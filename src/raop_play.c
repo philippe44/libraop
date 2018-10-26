@@ -410,8 +410,8 @@ int main(int argc, char *argv[]) {
 		if (status == PLAYING && raopcl_accept_frames(raopcl)) {
 			n = read(infile, buf, MAX_SAMPLES_PER_CHUNK*4);
 			if (!n)	continue;
-			raopcl_send_chunk(raopcl, buf, MAX_SAMPLES_PER_CHUNK, &playtime);
-			frames += MAX_SAMPLES_PER_CHUNK;
+			raopcl_send_chunk(raopcl, buf, n / 4, &playtime);
+			frames += n / 4;
 		}
 
 		if (interactive && kbhit()) {
