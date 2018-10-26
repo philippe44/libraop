@@ -1,4 +1,3 @@
-OS 			:= $(shell uname)
 CFLAGS 		+= -Wno-multichar -fdata-sections -ffunction-sections 
 
 ifeq ($(OS),Darwin)

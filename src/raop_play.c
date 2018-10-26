@@ -81,6 +81,7 @@ static int print_usage(char *argv[])
 			   "\t[-n <start>] (start at NTP <start> + <wait>)\n"
 			   "\t[-nf <start>] (start at NTP in <file> + <wait>)\n"
 			   "\t[-e] (encrypt)\n"
+   			   "\t[-a] send ALAC compressed audio\n"
 			   "\t[-s <secret>] (valid secret for AppleTV)\n"
 			   "\t[-t <et>] (et field in mDNS - used to detect MFi)\n"
 			   "\t[-m <[0][,1][,2]>] (md in mDNS: metadata capabilties 0=text, 1=artwork, 2=progress)\n"
@@ -241,7 +242,7 @@ int main(int argc, char *argv[]) {
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	__u64 start = 0, start_at = 0, last = 0, frames = 0;
-	bool interactive = false;
+	bool interactive = false, alac_compressed = false;
 	char *secret = NULL, *md = NULL, *et = NULL;
 	struct in_addr host = { INADDR_ANY };
 
@@ -285,6 +286,10 @@ int main(int argc, char *argv[]) {
 		}
 		if(!strcmp(argv[i],"-t")){
 			et = argv[++i];
+			continue;
+		}
+		if(!strcmp(argv[i],"-a")){
+			alac_compressed = true;
 			continue;
 		}
 		if(!strcmp(argv[i],"-n")){
@@ -343,7 +348,7 @@ int main(int argc, char *argv[]) {
 
 	init_platform(interactive);
 
-	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, true, MAX_SAMPLES_PER_CHUNK,
+	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, alac_compressed, MAX_SAMPLES_PER_CHUNK,
 								latency, crypto, false, secret, et, md,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
