@@ -82,7 +82,7 @@ extern "C" bool alac_to_pcm(struct alac_codec_s *codec, unsigned char* input,
 
 /*----------------------------------------------------------------------------*/
 // assumes stereo and little endian
-extern "C" bool pcm_to_alac_fast(uint8_t *sample, int frames, uint8_t **out, int *size, int bsize)
+extern "C" bool pcm_to_alac_raw(uint8_t *sample, int frames, uint8_t **out, int *size, int bsize)
 {
 	uint8_t *p;
 	uint32_t *in = (uint32_t*) sample;

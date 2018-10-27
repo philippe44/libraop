@@ -34,7 +34,7 @@ bool alac_to_pcm(struct alac_codec_s *codec, uint8_t* input,
 				 uint8_t *output, char channels, unsigned *out_frames);
 
 bool pcm_to_alac(struct alac_codec_s *codec, uint8_t *in, int frames, uint8_t **out, int *size);
-bool pcm_to_alac_fast(uint8_t *in, int frames, uint8_t **out, int *size, int bsize);
+bool pcm_to_alac_raw(uint8_t *in, int frames, uint8_t **out, int *size, int bsize);
 struct alac_codec_s *alac_create_encoder(int chunk_len, int sampleRate, int sampleSize, int channels);
 void alac_delete_encoder(struct alac_codec_s *codec);
 #ifdef __cplusplus

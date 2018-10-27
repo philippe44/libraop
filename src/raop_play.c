@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	__u64 start = 0, start_at = 0, last = 0, frames = 0;
-	bool interactive = false, alac_compressed = false;
+	bool interactive = false, alac = false;
 	char *secret = NULL, *md = NULL, *et = NULL;
 	struct in_addr host = { INADDR_ANY };
 
@@ -289,7 +289,7 @@ int main(int argc, char *argv[]) {
 			continue;
 		}
 		if(!strcmp(argv[i],"-a")){
-			alac_compressed = true;
+			alac = true;
 			continue;
 		}
 		if(!strcmp(argv[i],"-n")){
@@ -348,7 +348,7 @@ int main(int argc, char *argv[]) {
 
 	init_platform(interactive);
 
-	if ((raopcl = raopcl_create(host, NULL, NULL, RAOP_ALAC, alac_compressed, MAX_SAMPLES_PER_CHUNK,
+	if ((raopcl = raopcl_create(host, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, MAX_SAMPLES_PER_CHUNK,
 								latency, crypto, false, secret, et, md,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
@@ -360,7 +360,7 @@ int main(int argc, char *argv[]) {
 	player.hostent = gethostbyname(player.name);
 	memcpy(&player.addr.s_addr, player.hostent->h_addr_list[0], player.hostent->h_length);
 
-	if (!raopcl_connect(raopcl, player.addr, port, RAOP_ALAC, true)) {
+	if (!raopcl_connect(raopcl, player.addr, port, true)) {
 		raopcl_destroy(raopcl);
 		free(raopcl);
 		LOG_ERROR("Cannot connect to AirPlay device %s, check firewall",

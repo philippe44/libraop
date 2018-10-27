@@ -529,8 +529,27 @@ bool raopcl_send_chunk(struct raopcl_s *p, u8_t *sample, int frames, u64_t *play
 		_raopcl_send_sync(p, true);
 	}
 
-	if (p->alac_codec) pcm_to_alac(p->alac_codec, sample, frames, &encoded, &size);
-	else pcm_to_alac_fast(sample, frames, &encoded, &size, p->chunk_len);
+	switch (p->codec) {
+		case RAOP_ALAC:
+			pcm_to_alac(p->alac_codec, sample, frames, &encoded, &size);
+			break;
+		case RAOP_ALAC_RAW:
+			pcm_to_alac_raw(sample, frames, &encoded, &size, p->chunk_len);
+			break;
+		case RAOP_PCM: {
+			u8_t *src = sample, *dst = encoded = malloc(frames * 4);
+			for (size = 0; size < frames; size++) {
+				*dst++ = *(src + 1); *dst++ = *src++;
+				*dst++ = *(++src + 1); *dst++ = *src++;
+				src++;
+			}
+			size *= 4;
+			break;
+		}
+		default:
+			LOG_ERROR("[%p]: don't know what we're doing here", p);
+			return false;
+	}
 
 	if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
 		pthread_mutex_unlock(&p->mutex);
@@ -649,8 +668,8 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 
 /*----------------------------------------------------------------------------*/
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
-							   raop_codec_t codec, bool alac_encode, int chunk_len,
-							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
+							   raop_codec_t codec, int chunk_len, int latency_frames,
+							   raop_crypto_t crypto, bool auth, char *secret,
 							   char *et, char *md,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
@@ -695,8 +714,9 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 		return NULL;
 	}
 
-	if (alac_encode && (raopcld->alac_codec = alac_create_encoder(raopcld->chunk_len, sample_rate, sample_size, channels)) == NULL) {
+	if (codec == RAOP_ALAC && (raopcld->alac_codec = alac_create_encoder(raopcld->chunk_len, sample_rate, sample_size, channels)) == NULL) {
 		LOG_WARN("[%p]: cannot create ALAC codec", raopcld);
+		raopcld->codec = RAOP_ALAC_RAW;
 	}
 
 	LOG_INFO("[%p]: using %s coding", raopcld, raopcld->alac_codec ? "ALAC" : "PCM");
@@ -819,6 +839,7 @@ static bool raopcl_set_sdp(struct raopcl_s *p, char *sdp)
    // codec
 	switch (p->codec) {
 
+		case RAOP_ALAC_RAW:
 		case RAOP_ALAC: {
 			char buf[256];
 
@@ -827,11 +848,16 @@ static bool raopcl_set_sdp(struct raopcl_s *p, char *sdp)
 					"a=rtpmap:96 AppleLossless\r\n"
 					"a=fmtp:96 %d 0 %d 40 10 14 %d 255 0 0 %d\r\n",
 					p->chunk_len, p->sample_size, p->channels, p->sample_rate);
-			/* maybe one day I'll figure out how to send raw PCM ...
+			strcat(sdp, buf);
+			break;
+		}
+		case RAOP_PCM: {
+			char buf[256];
+
 			sprintf(buf,
 					"m=audio 0 RTP/AVP 96\r\n"
-					"a=rtpmap:96 L16/44100/2\r\n",
-			*/
+					"a=rtpmap:96 L%d/%d/%d\r\n",
+					p->sample_size, p->sample_rate, p->channels);
 			strcat(sdp, buf);
 			break;
 		}
@@ -930,7 +956,7 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, raop_codec_t codec, bool set_volume)
+bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, bool set_volume)
 {
 	struct {
 		u32_t sid;
@@ -950,7 +976,6 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, rao
 	kd[0].key = NULL;
 
 	if (host.s_addr != INADDR_ANY) p->host_addr.s_addr = host.s_addr;
-	if (codec != RAOP_NOCODEC) p->codec = codec;
 	if (destport != 0) p->rtsp_port = destport;
 
 	RAND_bytes((u8_t*) &p->ssrc, sizeof(p->ssrc));
@@ -1131,7 +1156,7 @@ bool raopcl_repair(struct raopcl_s *p, bool set_volume)
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
 
 	// this will put us again in FLUSHED state
-	rc &= raopcl_connect(p, p->host_addr, p->rtsp_port, p->codec, set_volume);
+	rc &= raopcl_connect(p, p->host_addr, p->rtsp_port, set_volume);
 
 	return rc;
 }

@@ -89,7 +89,7 @@ typedef struct raopcl_t {u32_t dummy;} raopcl_t;
 
 struct raopcl_s;
 
-typedef enum raop_codec_s { RAOP_NOCODEC = -1, RAOP_PCM = 0, RAOP_ALAC, RAOP_AAC,
+typedef enum raop_codec_s { RAOP_PCM = 0, RAOP_ALAC_RAW, RAOP_ALAC, RAOP_AAC,
 							RAOP_AAL_ELC } raop_codec_t;
 
 typedef enum raop_crypto_s { RAOP_CLEAR = 0, RAOP_RSA, RAOP_FAIRPLAY, RAOP_MFISAP,
@@ -139,13 +139,13 @@ typedef struct {
 
 // if volume < -30 and not -144 or volume > 0, then not "initial set volume" will be done
 struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
-							   raop_codec_t codec, bool alac_encode, int frame_len,
-							   int latency_frames, raop_crypto_t crypto, bool auth, char *secret,
+							   raop_codec_t codec, int frame_len, int latency_frames,
+							   raop_crypto_t crypto, bool auth, char *secret,
 							   char *et, char *md,
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);
-bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, raop_codec_t codec, bool set_volume);
+bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, bool set_volume);
 bool 	raopcl_repair(struct raopcl_s *p, bool set_volume);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
