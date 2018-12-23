@@ -120,7 +120,8 @@ bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr hos
 
 	getsockname(p->fd, (struct sockaddr*)&name, &namelen);
 	memcpy(&p->local_addr,&name.sin_addr, sizeof(struct in_addr));
-	sprintf(p->url,"rtsp://%s/%s", inet_ntoa(name.sin_addr),sid);
+
+	sprintf(p->url,"rtsp://%s/%s", inet_ntoa(host), sid);
 
 	return true;
 }
