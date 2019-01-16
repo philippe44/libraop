@@ -31,9 +31,9 @@ typedef struct sock_info_s {
 
 typedef struct rtp_port_s {
 	sock_info_t time;
-	sock_info_t	ctrl;
-	sock_info_t audio;
-} rtp_port_t;
+	sock_info_t	ctrl;
+	sock_info_t audio;
+} rtp_port_t;
 
 int open_tcp_socket(struct in_addr host, unsigned short *port);
 int open_udp_socket(struct in_addr host, unsigned short *port, bool blocking);

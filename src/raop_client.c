@@ -123,8 +123,8 @@
 
 // all the following must be 32-bits aligned
 
-typedef struct {
-	rtp_header_t hdr;
+typedef struct {
+	rtp_header_t hdr;
 	u32_t dummy;
 	ntp_t ref_time;
 	ntp_t recv_time;
@@ -256,12 +256,12 @@ u64_t raopcl_time32_to_ntp(u32_t time)
 bool raopcl_is_connected(struct raopcl_s *p)
 {
 	bool rc;
-	
+
 	if (!p) return false;
-	
+
 	pthread_mutex_lock(&p->mutex);
 	rc = rtspcl_is_connected(p->rtspcl);
-	pthread_mutex_unlock(&p->mutex);	 
+	pthread_mutex_unlock(&p->mutex);
 
 	return rc;
 }
@@ -588,12 +588,12 @@ bool raopcl_send_chunk(struct raopcl_s *p, u8_t *sample, int frames, u64_t *play
 
 	p->head_ts += p->chunk_len;
 
-	_raopcl_send_audio(p, packet, sizeof(rtp_audio_pkt_t) + size);
+	_raopcl_send_audio(p, packet, sizeof(rtp_audio_pkt_t) + size);
 
-	pthread_mutex_unlock(&p->mutex);
+	pthread_mutex_unlock(&p->mutex);
 
-	if (NTP2MS(*playtime) % 10000 < 8) {
-		LOG_INFO("[%p]: check n:%u p:%u ts:%Lu sn:%u\n               "
+	if (NTP2MS(*playtime) % 10000 < 8) {
+		LOG_INFO("[%p]: check n:%u p:%u ts:%Lu sn:%u\n               "
 				  "retr: %u, avail: %u, send: %u, select: %u)", p,
 				 MSEC(now), MSEC(*playtime), p->head_ts, p->seq_number,
 				 p->retransmit, p->sane.audio.avail, p->sane.audio.send,
@@ -625,12 +625,12 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 	*/
 	if (p->rtp_ports.audio.fd == -1 || p->state != RAOP_STREAMING) return false;
 
-	addr.sin_family = AF_INET;
-	addr.sin_addr = p->host_addr;
+	addr.sin_family = AF_INET;
+	addr.sin_addr = p->host_addr;
 	addr.sin_port = htons(p->rtp_ports.audio.rport);
 
 	FD_ZERO(&wfds);
-	FD_SET(p->rtp_ports.audio.fd, &wfds);
+	FD_SET(p->rtp_ports.audio.fd, &wfds);
 
 	/*
 	  The audio socket is non blocking, so we can can wait socket availability
@@ -640,7 +640,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 	timeout.tv_sec = 0;
 	timeout.tv_usec = (p->chunk_len * 1000000L) / (p->sample_rate * 2);
 
-	if (select(p->rtp_ports.audio.fd + 1, NULL, &wfds, NULL, &timeout) == -1) {
+	if (select(p->rtp_ports.audio.fd + 1, NULL, &wfds, NULL, &timeout) == -1) {
 		LOG_ERROR("[%p]: audio socket closed", p);
 		p->sane.audio.select++;
 	}
@@ -1019,8 +1019,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 
 	if (!raopcl_set_sdp(p, sdp)) goto erexit;
 
-	// AppleTV expects now the timing port ot be opened BEFORE the setup message
-	p->rtp_ports.time.lport = p->rtp_ports.time.rport = 0;
+	// AppleTV expects now the timing port ot be opened BEFORE the setup message
+	p->rtp_ports.time.lport = p->rtp_ports.time.rport = 0;
 	if ((p->rtp_ports.time.fd = open_udp_socket(p->local_addr, &p->rtp_ports.time.lport, true)) == -1) goto erexit;
 	p->time_running = true;
 	pthread_create(&p->time_thread, NULL, _rtp_timing_thread, (void*) p);
@@ -1076,8 +1076,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 	free_kd(kd);
 	_raopcl_disconnect(p, true);
 
-	return false;
-}
+	return false;
+}
 
 
 /*----------------------------------------------------------------------------*/
@@ -1121,7 +1121,7 @@ bool _raopcl_disconnect(struct raopcl_s *p, bool force)
 	pthread_mutex_unlock(&p->mutex);
 
 	_raopcl_terminate_rtp(p);
-	
+
 	rc = rtspcl_flush(p->rtspcl, p->seq_number + 1, p->head_ts + 1);
 	rc &= rtspcl_disconnect(p->rtspcl);
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
@@ -1131,7 +1131,7 @@ bool _raopcl_disconnect(struct raopcl_s *p, bool force)
 
 
 /*----------------------------------------------------------------------------*/
-bool raopcl_disconnect(struct raopcl_s *p) 
+bool raopcl_disconnect(struct raopcl_s *p)
 {
 	return _raopcl_disconnect(p, false);
 }
@@ -1236,7 +1236,7 @@ void _raopcl_send_sync(struct raopcl_s *raopcld, bool first)
 	rsp.curr_time.seconds = htonl(now >> 32);
 	rsp.curr_time.fraction = htonl(now);
 
-	// The DAC time is synchronized with gettime_ms(), minus the latency.
+	// The DAC time is synchronized with gettime_ms(), minus the latency.
 	rsp.rtp_timestamp = htonl(timestamp);
 	rsp.rtp_timestamp_latency = htonl(timestamp - raopcld->latency_frames);
 
@@ -1352,7 +1352,7 @@ void *_rtp_control_thread(void *args)
 			}
 			continue;
 		}
-		
+
 		if (FD_ISSET(raopcld->rtp_ports.ctrl.fd, &rfds)) {
 			rtp_lost_pkt_t lost;
 			int i, n, missed;
@@ -1394,8 +1394,8 @@ void *_rtp_control_thread(void *args)
 					addr.sin_addr = raopcld->host_addr;
 					addr.sin_port = htons(raopcld->rtp_ports.ctrl.rport);
 
-					raopcld->retransmit++;
-
+					raopcld->retransmit++;
+
 					n = sendto(raopcld->rtp_ports.ctrl.fd, (void*) hdr,
 							   sizeof(rtp_header_t) + raopcld->backlog[index].size,
 							   0, (void*) &addr, sizeof(addr));
@@ -1423,8 +1423,3 @@ void *_rtp_control_thread(void *args)
 
 	return NULL;
 }
-
-
-
-
-

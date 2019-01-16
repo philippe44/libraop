@@ -81,5 +81,3 @@ char *level2debug(log_level level)
 	default: return "warn";
 	}
 }
-
-

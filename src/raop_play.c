@@ -220,7 +220,7 @@ __u64 get_ntp(struct ntp_s *ntp)
 	if (ntp) *ntp = local;
 
 	return (((__u64) local.seconds) << 32) + local.fraction;
-}
+}
 
 
 /*----------------------------------------------------------------------------*/
@@ -464,6 +464,3 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
-
-
-
