@@ -46,7 +46,7 @@ char *_aprintf(const char *fmt, ...)
 
 	if (ret) vsprintf(ret, fmt, args);
 
-	va_end(args);
+	va_end(args);
 
 	return ret;
 }
@@ -224,7 +224,7 @@ int read_line(int fd, char *line, int maxlen, int timeout, int no_poll)
 	pfds.fd=fd;
 	pfds.events =POLLIN;
 	for(i=0;i<maxlen;i++){
-		if(no_poll || poll(&pfds, 1, timeout)) 
+		if(no_poll || poll(&pfds, 1, timeout))
 			rval=recv(fd,&ch,1,0);
 		else return 0;
 
@@ -311,4 +311,3 @@ int hex2bytes(char *hex, u8_t **bytes) {
 
 	return len;
 }
-

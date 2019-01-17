@@ -431,7 +431,7 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 	VALGRIND_MAKE_MEM_DEFINED(verify_secret, ed25519_secret_key_size);
 	curve25519_dh_CalculatePublicKey(verify_pub, verify_secret);
 
-	// POST the auth_pub and verify_pub concataned
+	// POST the auth_pub and verify_pub concataned
 	buf = malloc(4 + ed25519_public_key_size * 2);
 	len = 0;
 	memcpy(buf, "\x01\x00\x00\x00", 4); len += 4;
@@ -725,7 +725,5 @@ char *rtrim(char *s)
 
 char *trim(char *s)
 {
-    return rtrim(ltrim(s)); 
+    return rtrim(ltrim(s));
 }
-
-
