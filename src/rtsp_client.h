@@ -28,8 +28,6 @@ struct rtp_port_s;
 struct rtspcl_s *rtspcl_create(char* user_name);
 bool   			rtspcl_destroy(struct rtspcl_s *p);
 
-bool rtspcl_set_useragent(struct rtspcl_s *p, const char *name);
-
 bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, unsigned short destport, char *sid);
 bool rtspcl_disconnect(struct rtspcl_s *p);
 bool rtspcl_is_connected(struct rtspcl_s *p);
