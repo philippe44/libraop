@@ -1,6 +1,6 @@
-/*  
+/*
 *   Byte-oriented AES-256 implementation.
-*   All lookup tables replaced with 'on the fly' calculations. 
+*   All lookup tables replaced with 'on the fly' calculations.
 *
 *   Copyright (c) 2007-2009 Ilya O. Levin, http://www.literatecode.com
 *   Other contributors: Hal Finney
@@ -19,7 +19,7 @@
 *   OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 */
 #ifndef uint8_t
-#define uint8_t  unsigned char
+#include <stdint.h>
 #endif
 #ifndef size_t
 #include <stddef.h>
