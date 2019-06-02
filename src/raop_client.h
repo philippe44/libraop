@@ -149,6 +149,7 @@ bool	raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 bool 	raopcl_repair(struct raopcl_s *p, bool set_volume);
 bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
+bool 	raopcl_keepalive(struct raopcl_s *p);
 
 bool 	raopcl_set_progress(struct raopcl_s *p, u64_t elapsed, u64_t end);
 bool 	raopcl_set_progress_ms(struct raopcl_s *p, u32_t elapsed, u32_t duration);

@@ -349,6 +349,12 @@ static int raopcl_encrypt(raopcl_data_t *raopcld, u8_t *data, int size)
 
 
 /*----------------------------------------------------------------------------*/
+bool raopcl_keepalive(struct raopcl_s *p) {
+	return rtspcl_options(p->rtspcl, NULL);
+}
+
+
+/*----------------------------------------------------------------------------*/
 void raopcl_pause(struct raopcl_s *p)
 {
 	if (!p || p->state != RAOP_STREAMING) return;
