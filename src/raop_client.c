@@ -155,7 +155,6 @@ typedef struct raopcl_s {
 	} sane;
 	unsigned int retransmit;
 	u8_t iv[16]; // initialization vector for aes-cbc
-	u8_t nv[16]; // next vector for aes-cbc
 	u8_t key[16]; // key for aes-cbc
 	struct in_addr	host_addr, local_addr;
 	u16_t rtsp_port;
@@ -322,13 +321,14 @@ static int rsa_encrypt(u8_t *text, int len, u8_t *res)
 static int raopcl_encrypt(raopcl_data_t *raopcld, u8_t *data, int size)
 {
 	u8_t *buf;
+	u8_t nv[16];
 	int i=0,j;
-	memcpy(raopcld->nv,raopcld->iv,16);
+	memcpy(nv,raopcld->iv,16);
 	while(i+16<=size){
 		buf=data+i;
-		for(j=0;j<16;j++) buf[j] ^= raopcld->nv[j];
+		for(j=0;j<16;j++) buf[j] ^= nv[j];
 		aes_encrypt(&raopcld->ctx, buf, buf);
-		memcpy(raopcld->nv,buf,16);
+		memcpy(nv,buf,16);
 		i+=16;
 	}
 #if 0
@@ -337,9 +337,9 @@ static int raopcl_encrypt(raopcl_data_t *raopcld, u8_t *data, int size)
 		LOG_INFO("[%p]: a block less than 16 bytes(%d) is not encrypted", raopcld, size-i);
 		memset(tmp,0,16);
 		memcpy(tmp,data+i,size-i);
-		for(j=0;j<16;j++) tmp[j] ^= raopcld->nv[j];
+		for(j=0;j<16;j++) tmp[j] ^= nv[j];
 		aes_encrypt(&raopcld->ctx, tmp, tmp);
-		memcpy(raopcld->nv,tmp,16);
+		memcpy(nv,tmp,16);
 		memcpy(data+i,tmp,16);
 		i+=16;
 	}
@@ -734,7 +734,6 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	RAND_bytes(raopcld->key, sizeof(raopcld->key));
 	VALGRIND_MAKE_MEM_DEFINED(raopcld->key, sizeof(raopcld->key));
 
-	memcpy(raopcld->nv, raopcld->iv, sizeof(raopcld->nv));
 	aes_set_key(&raopcld->ctx, raopcld->key, 128);
 
 	raopcl_sanitize(raopcld);
