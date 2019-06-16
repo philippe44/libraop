@@ -1389,7 +1389,10 @@ void *_rtp_control_thread(void *args)
 					rtp_header_t *hdr = (rtp_header_t*) raopcld->backlog[index].buffer;
 
 					// packet have been released meanwhile, be extra cautious
-					if (!hdr) continue;
+					if (!hdr) {
+						missed++;
+						continue;
+					}
 
 					hdr->proto = 0x80;
 					hdr->type = 0x56 | 0x80;
