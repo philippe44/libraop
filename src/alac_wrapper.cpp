@@ -147,7 +147,7 @@ extern "C" bool pcm_to_alac(struct alac_codec_s *codec, uint8_t *in, int frames,
 {
 	*size = min(frames, (int) codec->outputFormat.mFramesPerPacket) * codec->inputFormat.mBytesPerFrame;
 	// seems that ALAC has a bug and creates more data than expected
-	*out = (uint8_t*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 8);
+	*out = (uint8_t*) malloc(*size * 2 + kALACMaxEscapeHeaderBytes + 64);
 	codec->encoder->Encode(codec->inputFormat, codec->outputFormat, in, *out, size);
 
 	return true;

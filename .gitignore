@@ -65,4 +65,4 @@ Win32
 
 # CMake build folder
 /build/
-/vendor/*
+
