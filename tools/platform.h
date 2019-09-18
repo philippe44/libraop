@@ -131,6 +131,12 @@ typedef u32_t __u32;
 typedef s16_t __s16;
 typedef s32_t __s32;
 //typedef s64_t __s64;
+#if INTPTR_MAX == INT32_MAX
+typedef s64_t __s64;
+typedef u64_t __u64;
+#else
+#error Unknown pointer size or missing size macros!
+#endif
 
 typedef struct ntp_s {
 	__u32 seconds;
