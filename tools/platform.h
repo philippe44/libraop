@@ -95,9 +95,6 @@ typedef unsigned __int8  u8_t;
 typedef unsigned __int16 u16_t;
 typedef unsigned __int32 u32_t;
 typedef unsigned __int64 u64_t;
-typedef __int16 s16_t;
-typedef __int32 s32_t;
-typedef __int64 s64_t;
 
 #define inline __inline
 
@@ -124,21 +121,9 @@ int gettimeofday(struct timeval *tv, struct timezone *tz);
 
 #endif
 
-typedef u8_t  __u8;
-typedef u16_t __u16;
-typedef u32_t __u32;
-//typedef u64_t __u64;
-typedef s16_t __s16;
-typedef s32_t __s32;
-//typedef s64_t __s64;
-#if INTPTR_MAX == INT32_MAX
-typedef s64_t __s64;
-typedef u64_t __u64;
-#endif
-
 typedef struct ntp_s {
-	__u32 seconds;
-	__u32 fraction;
+	u32_t seconds;
+	u32_t fraction;
 } ntp_t;
 
 u64_t timeval_to_ntp(struct timeval tv, struct ntp_s *ntp);

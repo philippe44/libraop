@@ -41,8 +41,8 @@
 #include "raop_client.h"
 #include "alac_wrapper.h"
 
-#define SEC(ntp) ((__u32) ((ntp) >> 32))
-#define FRAC(ntp) ((__u32) (ntp))
+#define SEC(ntp) ((u32_t) ((ntp) >> 32))
+#define FRAC(ntp) ((u32_t) (ntp))
 #define SECNTP(ntp) SEC(ntp),FRAC(ntp)
 
 log_level	util_loglevel;
@@ -208,18 +208,18 @@ static void close_platform(bool interactive) {
 }
 
 /*----------------------------------------------------------------------------*/
-__u64 get_ntp(struct ntp_s *ntp)
+u64_t get_ntp(struct ntp_s *ntp)
 {
 	struct timeval ctv;
 	struct ntp_s local;
 
 	gettimeofday(&ctv, NULL);
 	local.seconds  = ctv.tv_sec + 0x83AA7E80;
-	local.fraction = (((__u64) ctv.tv_usec) << 32) / 1000000;
+	local.fraction = (((u64_t) ctv.tv_usec) << 32) / 1000000;
 
 	if (ntp) *ntp = local;
 
-	return (((__u64) local.seconds) << 32) + local.fraction;
+	return (((u64_t) local.seconds) << 32) + local.fraction;
 }
 
 
@@ -241,7 +241,7 @@ int main(int argc, char *argv[]) {
 	int i, n = -1, level = 2;
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
-	__u64 start = 0, start_at = 0, last = 0, frames = 0;
+	u64_t start = 0, start_at = 0, last = 0, frames = 0;
 	bool interactive = false, alac = false;
 	char *secret = NULL, *md = NULL, *et = NULL;
 	struct in_addr host = { INADDR_ANY };
@@ -375,14 +375,14 @@ int main(int argc, char *argv[]) {
 			 port, (int) TS2MS(latency, raopcl_sample_rate(raopcl)));
 
 	if (start || wait) {
-		__u64 now = get_ntp(NULL);
+		u64_t now = get_ntp(NULL);
 
 		start_at = (start ? start : now) + MS2NTP(wait) -
 					TS2NTP(latency, raopcl_sample_rate(raopcl));
 
 		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", SECNTP(now), SECNTP(start_at),
 				 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ?
-				  (__u32) NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) :
+				  (u32_t) NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) :
 				  0);
 
 		raopcl_start_at(raopcl, start_at);
@@ -394,7 +394,7 @@ int main(int argc, char *argv[]) {
 	buf = malloc(MAX_SAMPLES_PER_CHUNK*4);
 
 	do {
-		__u64 playtime, now;
+		u64_t playtime, now;
 
 		now = get_ntp(NULL);
 
@@ -433,8 +433,8 @@ int main(int argc, char *argv[]) {
 				LOG_INFO("Stopped at : %u.%u", SECNTP(get_ntp(NULL)));
 				break;
 			case 'r': {
-				__u64 now = get_ntp(NULL);
-				__u64 start_at = now + MS2NTP(200) - TS2NTP(latency, raopcl_sample_rate(raopcl));
+				u64_t now = get_ntp(NULL);
+				u64_t start_at = now + MS2NTP(200) - TS2NTP(latency, raopcl_sample_rate(raopcl));
 
 				status = PLAYING;
 				raopcl_start_at(raopcl, start_at);
