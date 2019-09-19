@@ -33,12 +33,19 @@ raop_play
 # Fetch all dependencies
 git submodule update --init
 
+# Build OpenSSL (if openssl version != 1.0)
+cd vendor/openssl
+./conf
+make
+
 # Create build directory
 mkdir build
 cd build
 
 # Build project
 cmake ..
+# or cmake -DOPENSSL_ROOT_DIR=`pwd`/../vendor/openssl -DOPENSSL_INCLUDE_DIR=`pwd`/../vendor/openssl/include -DOPENSSL_LIBRARIES=`pwd`/../vendor/openssl ..
+
 make
 ```
 
