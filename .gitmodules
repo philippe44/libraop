@@ -7,3 +7,6 @@
 [submodule "vendor/valgrind"]
 	path = vendor/valgrind
 	url = http://repo.or.cz/valgrind.git
+[submodule "vendor/openssl"]
+	path = vendor/openssl
+	url = https://github.com/openssl/openssl/
