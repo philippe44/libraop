@@ -33,7 +33,7 @@ raop_play
 # Fetch all dependencies
 git submodule update --init
 
-# Build OpenSSL (if openssl version != 1.0)
+# Build OpenSSL (if openssl version != 1.0) on eg Debian Buster
 cd vendor/openssl
 ./conf
 make
