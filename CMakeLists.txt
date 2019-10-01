@@ -21,3 +21,4 @@ set(ALACSRC ${CMAKE_SOURCE_DIR}/vendor/alac/codec/ag_dec.c ${CMAKE_SOURCE_DIR}/v
 add_executable(${PROJECT_NAME} ${PROGSRC} ${CURVESRC} ${ALACSRC} src/raop_play.c)
 target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
 target_link_libraries(${PROJECT_NAME} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${PROJECT_NAME} ${CMAKE_DL_LIBS})
