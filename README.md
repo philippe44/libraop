@@ -35,7 +35,7 @@ git submodule update --init
 
 # Build OpenSSL (if openssl version != 1.0) on eg Debian Buster
 cd vendor/openssl
-./conf
+./config
 make
 
 # Create build directory
