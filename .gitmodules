@@ -6,7 +6,7 @@
 	url = https://github.com/macosforge/alac.git
 [submodule "vendor/valgrind"]
 	path = vendor/valgrind
-	url = http://sourceware.org/git/valgrind.git
+	url =  http://sourceware.org/git/valgrind.git
 [submodule "vendor/openssl"]
 	path = vendor/openssl
 	url = https://github.com/openssl/openssl/
