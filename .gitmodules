@@ -9,5 +9,5 @@
 	url = https://github.com/openssl/openssl/
 [submodule "vendor/valgrind"]
 	path = vendor/valgrind
-	url = http://sourceware.org/git/valgrind.git
+	url = http://repo.or.cz/valgrind.git
 	
