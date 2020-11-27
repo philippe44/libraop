@@ -188,6 +188,7 @@ typedef struct raopcl_s {
 	char secret[SECRET_SIZE + 1];
 	char et[16];
 	u8_t md_caps;
+	u16_t port_base, port_range;
 } raopcl_data_t;
 
 
@@ -673,7 +674,8 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 
 
 /*----------------------------------------------------------------------------*/
-struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active_remote,
+struct raopcl_s *raopcl_create(struct in_addr local, u16_t port_base, u16_t port_range,
+							   char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int chunk_len, int latency_frames,
 							   raop_crypto_t crypto, bool auth, char *secret,
 							   char *et, char *md,
@@ -692,6 +694,8 @@ struct raopcl_s *raopcl_create(struct in_addr local, char *DACP_id, char *active
 	memset(raopcld, 0, sizeof(raopcl_data_t));
 
 	//  raopcld->sane is set to 0
+	raopcld->port_base = port_base;
+	raopcld->port_range = port_base ? port_range : 1;
 	raopcld->sample_rate = sample_rate;
 	raopcld->sample_size = sample_size;
 	raopcld->channels = channels;
@@ -973,12 +977,16 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 	char sdp[1024];
 	key_data_t kd[MAX_KD];
 	char *buf;
+	struct {
+		u16_t count, offset;
+	} port = { 0 };
 
 	if (!p) return false;
 
 	if (p->state >= RAOP_FLUSHING) return true;
 
 	kd[0].key = NULL;
+	port.offset = rand() % p->port_range;
 
 	if (host.s_addr != INADDR_ANY) p->host_addr.s_addr = host.s_addr;
 	if (destport != 0) p->rtsp_port = destport;
@@ -1025,8 +1033,15 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 	if (!raopcl_set_sdp(p, sdp)) goto erexit;
 
 	// AppleTV expects now the timing port ot be opened BEFORE the setup message
-	p->rtp_ports.time.lport = p->rtp_ports.time.rport = 0;
-	if ((p->rtp_ports.time.fd = open_udp_socket(p->local_addr, &p->rtp_ports.time.lport, true)) == -1) goto erexit;
+	p->rtp_ports.time.rport = 0;
+
+	do {
+		p->rtp_ports.time.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
+		p->rtp_ports.time.fd = open_udp_socket(p->local_addr, &p->rtp_ports.time.lport, true);
+	} while (p->rtp_ports.time.fd < 0 && port.count < p->port_range);
+
+	if (p->rtp_ports.time.fd < 0) goto erexit;
+
 	p->time_running = true;
 	pthread_create(&p->time_thread, NULL, _rtp_timing_thread, (void*) p);
 
@@ -1041,9 +1056,16 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr host, u16_t destport, boo
 	else if (!rtspcl_announce_sdp(p->rtspcl, sdp))goto erexit;
 
 	// open RTP sockets, need local ports here before sending SETUP
-	p->rtp_ports.ctrl.lport = p->rtp_ports.audio.lport = 0;
-	if ((p->rtp_ports.ctrl.fd = open_udp_socket(p->local_addr, &p->rtp_ports.ctrl.lport, true)) == -1) goto erexit;
-	if ((p->rtp_ports.audio.fd = open_udp_socket(p->local_addr, &p->rtp_ports.audio.lport, false)) == -1) goto erexit;
+	do {
+		p->rtp_ports.ctrl.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
+		p->rtp_ports.ctrl.fd = open_udp_socket(p->local_addr, &p->rtp_ports.ctrl.lport, true);
+	} while (p->rtp_ports.ctrl.fd < 0 && port.count < p->port_range);
+	do {
+		p->rtp_ports.audio.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
+		p->rtp_ports.audio.fd = open_udp_socket(p->local_addr, &p->rtp_ports.audio.lport, false);
+	} while (p->rtp_ports.audio.fd < 0 && port.count < p->port_range);
+
+	if (p->rtp_ports.ctrl.fd < 0 ||  p->rtp_ports.audio.fd < 0) goto erexit;
 
 	// RTSP SETUP : get all RTP destination ports
 	if (!rtspcl_setup(p->rtspcl, &p->rtp_ports, kd)) goto erexit;
