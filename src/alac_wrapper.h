@@ -28,7 +28,7 @@ extern "C" {
 
 struct alac_codec_s *alac_create_decoder(int magic_cookie_size, uint8_t *magic_cookie,
 								uint8_t *sample_size, unsigned *sample_rate,
-								uint8_t *channels);
+								uint8_t *channels, unsigned int *block_size);
 void alac_delete_decoder(struct alac_codec_s *codec);
 bool alac_to_pcm(struct alac_codec_s *codec, uint8_t* input,
 				 uint8_t *output, char channels, unsigned *out_frames);
