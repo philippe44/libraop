@@ -24,6 +24,7 @@
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 #include <openssl/engine.h>
+#include "sslshim.h"
 
 #include <pthread.h>
 #include <semaphore.h>
@@ -305,13 +306,15 @@ static int rsa_encrypt(u8_t *text, int len, u8_t *res)
 			"OitnZ/bDzPHrTOZz0Dew0uowxf/+sG+NCK3eQJVxqcaJ/vEHKIVd2M+5qL71yJ"
 			"Q+87X6oV3eaYvt3zWZYD6z5vYTcrtij2VZ9Zmni/UAaHqn9JdsBWLUEpVviYnh"
 			"imNVvYFZeCXg/IdTQ+x4IRdiXNv5hEew==";
-    char e[] = "AQAB";
+	char e[] = "AQAB";
+	BIGNUM *n_bn, *e_bn;
 
 	rsa = RSA_new();
 	size = base64_decode(n, modules);
-	rsa->n = BN_bin2bn(modules, size, NULL);
+	n_bn = BN_bin2bn(modules, size, NULL);
 	size = base64_decode(e, exponent);
-	rsa->e = BN_bin2bn(exponent, size, NULL);
+	e_bn = BN_bin2bn(exponent, size, NULL);
+	RSA_set0_key(rsa, n_bn, e_bn, NULL);
 	size = RSA_public_encrypt(len, text, res, rsa, RSA_PKCS1_OAEP_PADDING);
 	RSA_free(rsa);
 

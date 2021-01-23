@@ -31,6 +31,7 @@ SOURCES = log_util.c raop_client.c rtsp_client.c \
 		  ag_dec.c ag_enc.c ALACBitUtilities.c ALACEncoder.cpp dp_enc.c EndianPortable.c matrix_enc.c \
 		  curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
 		  ed25519_sign.c ed25519_verify.c \
+		  sslshim.c \
 		  raop_play.c 
 		
 OBJECTS = $(patsubst %.c,$(OBJ)/%.o,$(filter %.c,$(SOURCES))) $(patsubst %.cpp,$(OBJ)/%.o,$(filter %.cpp,$(SOURCES)))
