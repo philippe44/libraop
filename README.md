@@ -31,7 +31,8 @@ raop_play
 
 ```sh
 # Fetch all dependencies
-git submodule update --init
+# git submodule update --init
+git submodule update --force --recursive --init --remote
 
 # Create build directory
 mkdir build
