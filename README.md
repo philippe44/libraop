@@ -30,6 +30,9 @@ raop_play
 ## Building using CMake
 
 ```sh
+# install build libreries 
+apt-get install cmake
+
 # Fetch all dependencies
 # git submodule update --init
 git submodule update --force --recursive --init --remote
