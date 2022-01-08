@@ -30,8 +30,12 @@ raop_play
 ## Building using CMake
 
 ```sh
+# install build libreries 
+apt-get install build-essential cmake  libssl-dev
+
 # Fetch all dependencies
-git submodule update --init
+# git submodule update --init
+git submodule update --force --recursive --init --remote
 
 # Create build directory
 mkdir build
