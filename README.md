@@ -31,7 +31,7 @@ raop_play
 
 ```sh
 # install build libreries 
-apt-get install cmake
+apt-get install build-essential cmake  libssl-dev
 
 # Fetch all dependencies
 # git submodule update --init
