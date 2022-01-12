@@ -1,0 +1,11 @@
+CC	= aarch64-cross-linux-gnueabi-gcc
+CFLAGS  ?= -Wall -Wno-multichar -Wno-unused-but-set-variable -fPIC -O2 $(OPTS) $(INCLUDE) $(DEFINES)
+LDFLAGS ?= -s -lpthread -lssl -lcrypto -ldl -lm -lrt -lstdc++ -L. 
+
+# for LD debug -s
+
+OBJ			= bin/aarch64
+EXECUTABLE 		= bin/raop_play-aarch64
+
+include Makefile
+

@@ -94,11 +94,15 @@ bool rtspcl_is_sane(struct rtspcl_s *p)
 	struct pollfd pfds;
 
 	pfds.fd = p->fd;
-	pfds.events = POLLOUT;
+	pfds.events = POLLIN;
 
 	if (p->fd == -1) return true;
 
+#if WIN
+	n = WSAPoll(&pfds, 1, 0);
+#else
 	n = poll(&pfds, 1, 0);
+#endif
 	if (n == -1 || (pfds.revents & POLLERR) || (pfds.revents & POLLHUP)) return false;
 
 	return true;

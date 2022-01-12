@@ -208,7 +208,7 @@ static void close_platform(bool interactive) {
 }
 
 /*----------------------------------------------------------------------------*/
-__u64 get_ntp(struct ntp_s *ntp)
+u64_t get_ntp(struct ntp_s *ntp)
 {
 	struct timeval ctv;
 	struct ntp_s local;

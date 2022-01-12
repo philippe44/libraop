@@ -67,9 +67,9 @@
 typedef u_int8_t  u8_t;
 typedef u_int16_t u16_t;
 typedef u_int32_t u32_t;
-typedef u_int64_t u64_t;
 typedef int16_t   s16_t;
 typedef int32_t   s32_t;
+typedef u_int64_t u64_t;
 typedef int64_t   s64_t;
 
 #define last_error() errno
@@ -127,10 +127,12 @@ int gettimeofday(struct timeval *tv, struct timezone *tz);
 typedef u8_t  __u8;
 typedef u16_t __u16;
 typedef u32_t __u32;
-typedef u64_t __u64;
 typedef s16_t __s16;
 typedef s32_t __s32;
+#ifndef __aarch64__
+typedef u64_t __u64;
 typedef s64_t __s64;
+#endif
 
 typedef struct ntp_s {
 	__u32 seconds;
