@@ -1,9 +1,9 @@
 [submodule "vendor/curve25519"]
         path = vendor/curve25519
-        url = https://github.com/msotoodeh/curve25519                                        
+        url = https://github.com/msotoodeh/curve25519.git                                        
 [submodule "vendor/alac"]
         path = vendor/alac
-        url = https://github.com/mikebrady/alac                                   
+        url = https://github.com/mikebrady/alac.git                                   
 [submodule "vendor/valgrind"]
         path = vendor/valgrind
         url = https://sourceware.org/git/valgrind.git                                      
