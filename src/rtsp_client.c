@@ -272,7 +272,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 
 	if ((temp = kd_lookup(rkd, "Session")) != NULL) {
 		p->session = strdup(trim(temp));
-		LOG_DEBUG("[%p]: <------- : %s: session:%s",p , p->session);
+		LOG_DEBUG("[%p]: <------ : session:%s", p, p->session);
 		return true;
 	}
 	else {
