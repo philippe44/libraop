@@ -37,11 +37,11 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret);
 bool rtspcl_auth_setup(struct rtspcl_s *p);
 bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp);
 bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *kd);
-bool rtspcl_record(struct rtspcl_s *p, u16_t start_seq, u32_t start_ts, key_data_t *kd);
+bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, key_data_t *kd);
 bool rtspcl_set_parameter(struct rtspcl_s *p, char *param);
-bool rtspcl_flush(struct rtspcl_s *p, u16_t seq_number, u32_t timestamp);
-bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list args);
-bool rtspcl_set_artwork(struct rtspcl_s *p, u32_t timestamp, char *content_type, int size, char *image);
+bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp);
+bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list args);
+bool rtspcl_set_artwork(struct rtspcl_s *p, uint32_t timestamp, char *content_type, int size, char *image);
 
 bool rtspcl_remove_all_exthds(struct rtspcl_s *p);
 bool rtspcl_add_exthds(struct rtspcl_s *p, char *key, char *data);

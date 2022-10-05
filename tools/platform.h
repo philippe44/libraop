@@ -48,6 +48,8 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 #if LINUX || OSX || FREEBSD
 #include <sys/types.h>
@@ -63,14 +65,6 @@
 #include <pthread.h>
 #include <errno.h>
 #include <memcheck.h>
-
-typedef u_int8_t  u8_t;
-typedef u_int16_t u16_t;
-typedef u_int32_t u32_t;
-typedef int16_t   s16_t;
-typedef int32_t   s32_t;
-typedef u_int64_t u64_t;
-typedef int64_t   s64_t;
 
 #define last_error() errno
 #define ERROR_WOULDBLOCK EWOULDBLOCK
@@ -89,61 +83,32 @@ char *GetTempPath(u16_t size, char *path);
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
-#include <sys/timeb.h>
 
-typedef unsigned __int8  u8_t;
-typedef unsigned __int16 u16_t;
-typedef unsigned __int32 u32_t;
-typedef unsigned __int64 u64_t;
-typedef __int16 s16_t;
-typedef __int32 s32_t;
-typedef __int64 s64_t;
-
-#define inline __inline
-
-int gettimeofday(struct timeval *tv, struct timezone *tz);
-
-//#define poll(fds,numfds,timeout) WSAPoll(fds,numfds,timeout)
 #define usleep(x) Sleep((x)/1000)
 #define sleep(x) Sleep((x)*1000)
-#define last_error() WSAGetLastError()
+
 #define ERROR_WOULDBLOCK WSAEWOULDBLOCK
 #define open _open
 #define read _read
-#define snprintf _snprintf
 #define fresize(f, s) chsize(fileno(f), s)
 #define strcasecmp stricmp
-#define _random(x) random(x)
+#define random rand
+
+int poll(struct pollfd* fds, unsigned long numfds, int timeout);
+int asprintf(char** s, const char* fmt, ...);
+int vasprintf(char** strp, const char* fmt, va_list args);
+
 #define VALGRIND_MAKE_MEM_DEFINED(x,y)
 
-#define in_addr_t u32_t
+typedef uint32_t in_addr_t;
 #define socklen_t int
-#define ssize_t int
+typedef SSIZE_T	ssize_t;
 
 #define RTLD_NOW 0
 
 #endif
 
-typedef u8_t  __u8;
-typedef u16_t __u16;
-typedef u32_t __u32;
-typedef s16_t __s16;
-typedef s32_t __s32;
-#ifndef __aarch64__
-typedef u64_t __u64;
-typedef s64_t __s64;
-#endif
+uint32_t gettime_ms(void);
+uint64_t gettime_ms64(void);
 
-typedef struct ntp_s {
-	__u32 seconds;
-	__u32 fraction;
-} ntp_t;
-
-u64_t timeval_to_ntp(struct timeval tv, struct ntp_s *ntp);
-u64_t get_ntp(struct ntp_s *ntp);
-u32_t gettime_ms(void);
-u64_t gettime_ms64(void);
-
-#define min(a,b) (((a) < (b)) ? (a) : (b))
-#define max(a,b) (((a) > (b)) ? (a) : (b))
 #endif     // __PLATFORM

@@ -2,7 +2,7 @@
  *  logging utility
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
- *  (c) Philippe 2016, philippe_44@outlook.com
+ *  (c) Philippe, philippe_44@outlook.com
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,6 @@
 
 #ifndef __LOG_UTIL_H
 #define __LOG_UTIL_H
-
-#include "platform.h"
 
 typedef enum { lSILENCE = 0, lERROR, lWARN, lINFO, lDEBUG, lSDEBUG } log_level;
 

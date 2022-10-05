@@ -27,60 +27,6 @@
 extern log_level	util_loglevel;
 static log_level	*loglevel = &util_loglevel;
 
-char *_aprintf(const char *fmt, ...)
-{
-	char *ret;
-	va_list args, cp;
-	int len;
-
-	va_start(args, fmt);
-#if WIN
-	len = vsnprintf(NULL, 0, fmt, args);
-#else
-	va_copy(cp, args);
-	len = vsnprintf(NULL, 0, fmt, cp);
-	va_end(cp);
-#endif
-
-	ret = malloc(len + 1);
-
-	if (ret) vsprintf(ret, fmt, args);
-
-	va_end(args);
-
-	return ret;
-}
-
-#if WIN
-// this only implements numfds == 1
-int poll(struct pollfd *fds, unsigned long numfds, int timeout) {
-	fd_set r, w;
-	struct timeval tv;
-	int ret;
-
-	FD_ZERO(&r);
-	FD_ZERO(&w);
-
-	if (fds[0].events & POLLIN) FD_SET(fds[0].fd, &r);
-	if (fds[0].events & POLLOUT) FD_SET(fds[0].fd, &w);
-
-	tv.tv_sec = timeout / 1000;
-	tv.tv_usec = 1000 * (timeout % 1000);
-
-	ret = select(fds[0].fd + 1, &r, &w, NULL, &tv);
-
-	if (ret < 0) return ret;
-
-	fds[0].revents = 0;
-	if (FD_ISSET(fds[0].fd, &r)) fds[0].revents |= POLLIN;
-	if (FD_ISSET(fds[0].fd, &w)) fds[0].revents |= POLLOUT;
-
-	return ret;
-}
-
-#endif
-
-
 static void set_nonblock(int s) {
 #if WIN
 	u_long iMode = 1;
@@ -150,58 +96,55 @@ int open_udp_socket(struct in_addr host, unsigned short *port, bool blocking)
  * as long as the socket is not non-blocking, this can block the process
  * nsport is network byte order
  */
-bool get_tcp_connect(int sd, struct sockaddr_in dest_addr)
+bool get_tcp_connect(int sd, struct sockaddr_in peer)
 {
-	if(connect(sd, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr))){
-		usleep(100*1000);
-		// try one more time
-		if(connect(sd, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr))){
-			LOG_ERROR("cannot connect addr=%s, port=%d",
-				   inet_ntoa(dest_addr.sin_addr), ntohs(dest_addr.sin_port));
-			return false;
+	for (size_t count = 0; count < 2; count++) {
+		if (!connect(sd, (struct sockaddr*) &peer, sizeof(struct sockaddr))) {
+			return true;
 		}
+		usleep(100*1000);
 	}
 
-	return true;
+	LOG_ERROR("cannot connect addr=%s, port=%d", inet_ntoa(peer.sin_addr), ntohs(peer.sin_port));
+	return false;
 }
 
-
-bool get_tcp_connect_by_host(int sd, struct in_addr host, unsigned short destport)
+bool get_tcp_connect_by_host(int sd, struct in_addr peer, unsigned short port)
 {
 	struct sockaddr_in addr;
 
 	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = host.s_addr;
-	addr.sin_port=htons(destport);
+	addr.sin_addr.s_addr = peer.s_addr;
+	addr.sin_port = htons(port);
 
 	return get_tcp_connect(sd, addr);
 }
 
 /* bind an opened socket to specified host and port.
- * if *port=0, use dynamically assigned port
+ * if port is NULL or *port=0, use dynamically assigned port
  */
 bool bind_host(int sd, struct in_addr host, unsigned short *port)
 {
-	struct sockaddr_in my_addr;
+	struct sockaddr_in addr;
 	socklen_t nlen=sizeof(struct sockaddr);
 
-	memset(&my_addr, 0, sizeof(my_addr));
+	memset(&addr, 0, sizeof(addr));
 
 	/* use specified hostname */
-	my_addr.sin_addr.s_addr = host.s_addr;
-	my_addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = host.s_addr;
+	addr.sin_family = AF_INET;
 
 	/* bind a specified port */
-	my_addr.sin_port = htons(*port);
+	addr.sin_port = port ? htons(*port) : 0;
 
-	if (bind(sd, (struct sockaddr *) &my_addr, sizeof(my_addr))<0){
+	if (bind(sd, (struct sockaddr *) &addr, sizeof(addr)) < 0){
 		LOG_ERROR("cannot bind: %s", strerror(errno));
 		return false;
 	}
 
-	if (*port==0) {
-		getsockname(sd, (struct sockaddr *) &my_addr, &nlen);
-		*port=ntohs(my_addr.sin_port);
+	if (port && *port == 0) {
+		getsockname(sd, (struct sockaddr *) &addr, &nlen);
+		*port = ntohs(addr.sin_port);
 	}
 
 	return true;
@@ -300,7 +243,7 @@ int remove_char_from_string(char *str, char rc)
  * transform an hex string (into an array or bytes)
  * return the number of deleted characters
  */
-int hex2bytes(char *hex, u8_t **bytes) {
+int hex2bytes(char *hex, uint8_t **bytes) {
 	size_t i, len = strlen(hex) / 2;
 
 	if (!*bytes && (*bytes = malloc(len)) == NULL) return 0;

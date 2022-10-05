@@ -1,9 +1,12 @@
-[submodule "vendor/curve25519"]
-        path = vendor/curve25519
-        url = https://github.com/msotoodeh/curve25519.git                                    
-[submodule "vendor/alac"]
-        path = vendor/alac
-        url = https://github.com/mikebrady/alac.git                         
-[submodule "vendor/valgrind"]
-        path = vendor/valgrind
-        url = https://sourceware.org/git/valgrind.git                                      
+[submodule "alac"]
+	path = alac
+	url = https://github.com/philippe44/alac
+[submodule "openssl"]
+	path = openssl
+	url = https://github.com/philippe44/openssl
+[submodule "pthreads4w"]
+	path = pthreads4w
+	url = https://github.com/philippe44/pthreads4w
+[submodule "curve25519"]
+	path = curve25519
+	url = https://github.com/philippe44/curve25519

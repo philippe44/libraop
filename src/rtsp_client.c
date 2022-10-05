@@ -24,16 +24,22 @@
 
 #include <openssl/rand.h>
 
-#include "../include/external_calls.h"
-#include "../include/ed25519_signature.h"
-#include "../include/curve25519_dh.h"
-#include "sha512.h"
-#include "aes_ctr.h"
+#ifdef USE_CURVE25519
+#include "ed25519_signature.h"
+#else
+#include <openssl/evp.h>
+#include <openssl/sha.h>
+#endif
 
+#include "aes_ctr.h"
 #include "aexcl_lib.h"
 #include "rtsp_client.h"
 
-#define MAX_NUM_KD 20
+#define PUBLIC_KEY_SIZE 32
+#define SECRET_KEY_SIZE 32
+#define PRIVATE_KEY_SIZE 64
+#define SIGNATURE_SIZE	64
+
 typedef struct rtspcl_s {
     int fd;
     char url[128];
@@ -110,16 +116,15 @@ bool rtspcl_is_sane(struct rtspcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, u16_t destport, char *sid)
+bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, uint16_t destport, char *sid)
 {
-	u16_t myport=0;
 	struct sockaddr_in name;
 	socklen_t namelen = sizeof(name);
 
 	if (!p) return false;
 
 	p->session = NULL;
-	if ((p->fd = open_tcp_socket(local, &myport)) == -1) return false;
+	if ((p->fd = open_tcp_socket(local, NULL)) == -1) return false;
 	if (!get_tcp_connect_by_host(p->fd, host, destport)) return false;
 
 	getsockname(p->fd, (struct sockaddr*)&name, &namelen);
@@ -262,7 +267,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 	port->audio.rport = 0;
 
 	hds[0].key = "Transport";
-	hds[0].data = _aprintf("RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%d;timing_port=%d",
+	asprintf(&hds[0].data, "RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%d;timing_port=%d",
 							(unsigned) port->ctrl.lport, (unsigned) port->time.lport);
 	if (!hds[0].data) return false;
 	hds[1].key = NULL;
@@ -284,7 +289,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_record(struct rtspcl_s *p, u16_t start_seq, u32_t start_ts, key_data_t *rkd)
+bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, key_data_t *rkd)
 {
 	bool rc;
 	key_data_t hds[3];
@@ -299,7 +304,7 @@ bool rtspcl_record(struct rtspcl_s *p, u16_t start_seq, u32_t start_ts, key_data
 	hds[0].key 	= "Range";
 	hds[0].data = "npt=0-";
 	hds[1].key 	= "RTP-Info";
-	hds[1].data = _aprintf("seq=%u;rtptime=%u", (unsigned) start_seq, (unsigned) start_ts);
+	asprintf(&hds[1].data, "seq=%u;rtptime=%u", (unsigned) start_seq, (unsigned) start_ts);
 	if (!hds[1].data) return false;
 	hds[2].key	= NULL;
 
@@ -320,7 +325,7 @@ bool rtspcl_set_parameter(struct rtspcl_s *p, char *param)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_artwork(struct rtspcl_s *p, u32_t timestamp, char *content_type, int size, char *image)
+bool rtspcl_set_artwork(struct rtspcl_s *p, uint32_t timestamp, char *content_type, int size, char *image)
 {
 	key_data_t hds[2];
 	char rtptime[20];
@@ -338,7 +343,7 @@ bool rtspcl_set_artwork(struct rtspcl_s *p, u32_t timestamp, char *content_type,
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list args)
+bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list args)
 {
 	key_data_t hds[2];
 	char rtptime[20];
@@ -365,7 +370,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list arg
 
 	while (count-- && (q-str) < 1024) {
 		char *fmt, type;
-		u32_t size;
+		uint32_t size;
 
 		fmt = va_arg(args, char*);
 		type = (char) va_arg(args, int);
@@ -403,7 +408,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, u32_t timestamp, int count, va_list arg
 /*----------------------------------------------------------------------------*/
 bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd)
 {
-	if(!p) return false;
+	if (!p) return false;
 
 	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, rkd, NULL, NULL, "*");
 }
@@ -412,16 +417,16 @@ bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd)
 /*----------------------------------------------------------------------------*/
 bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 {
-	u8_t auth_pub[ed25519_public_key_size], auth_priv[ed25519_private_key_size];
-	u8_t verify_pub[ed25519_public_key_size], verify_secret[ed25519_secret_key_size];
-	u8_t atv_pub[ed25519_public_key_size], *atv_data;
-	u8_t secret[ed25519_secret_key_size], shared_secret[ed25519_secret_key_size];
-	u8_t *buf, *content;
-	int atv_len, len;
+	uint8_t auth_pub[PUBLIC_KEY_SIZE], auth_priv[PRIVATE_KEY_SIZE];
+	uint8_t verify_pub[PUBLIC_KEY_SIZE], verify_secret[SECRET_KEY_SIZE];
+	uint8_t atv_pub[PUBLIC_KEY_SIZE], *atv_data;
+	uint8_t secret[SECRET_KEY_SIZE], shared_secret[SECRET_KEY_SIZE];
+	uint8_t signed_keys[SIGNATURE_SIZE];
+	uint8_t *buf, *content;
 	SHA512_CTX digest;
-	u8_t signed_keys[ed25519_signature_size];
-	u8_t aes_key[16], aes_iv[16];
+	uint8_t aes_key[16], aes_iv[16];
 	aes_ctr_context ctx;
+	int atv_len, len;
 	bool rc = true;
 
 	if (!p) return false;
@@ -429,18 +434,34 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 	hex2bytes(secret_hex, &buf);
 
 	// retrieve authentication keys from secret
+#ifdef USE_CURVE25519
 	ed25519_CreateKeyPair(auth_pub, auth_priv, NULL, secret);
+#else
+	EVP_PKEY* priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, secret, SECRET_KEY_SIZE);
+	size_t size = SECRET_KEY_SIZE;
+	EVP_PKEY_get_raw_private_key(priv_key, auth_priv, &size);
+	EVP_PKEY_get_raw_public_key(priv_key, auth_priv + SECRET_KEY_SIZE, &size);
+	EVP_PKEY_get_raw_public_key(priv_key, auth_pub, &size);
+	EVP_PKEY_free(priv_key);
+#endif
 	// create a verification public key
-	RAND_bytes(verify_secret, ed25519_secret_key_size);
-	VALGRIND_MAKE_MEM_DEFINED(verify_secret, ed25519_secret_key_size);
+	RAND_bytes(verify_secret, SECRET_KEY_SIZE);
+	VALGRIND_MAKE_MEM_DEFINED(verify_secret, SECRET_KEY_SIZE);
+#ifdef USE_CURVE25519
 	curve25519_dh_CalculatePublicKey(verify_pub, verify_secret);
+#else
+	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, verify_secret, SECRET_KEY_SIZE);
+	size = PUBLIC_KEY_SIZE;
+	EVP_PKEY_get_raw_public_key(priv_key, verify_pub, &size);
+	EVP_PKEY_free(priv_key);
+#endif
 
 	// POST the auth_pub and verify_pub concataned
-	buf = malloc(4 + ed25519_public_key_size * 2);
+	buf = malloc(4 + PUBLIC_KEY_SIZE * 2);
 	len = 0;
 	memcpy(buf, "\x01\x00\x00\x00", 4); len += 4;
-	memcpy(buf + len, verify_pub, ed25519_public_key_size); len += ed25519_public_key_size;
-	memcpy(buf + len, auth_pub, ed25519_public_key_size); len += ed25519_public_key_size;
+	memcpy(buf + len, verify_pub, PUBLIC_KEY_SIZE); len += PUBLIC_KEY_SIZE;
+	memcpy(buf + len, auth_pub, PUBLIC_KEY_SIZE); len += PUBLIC_KEY_SIZE;
 
 	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf, len, 1, NULL, NULL, (char**) &content, &atv_len, "/pair-verify")) {
 		LOG_ERROR("[%p]: AppleTV verify step 1 failed (pair again)", p);
@@ -449,38 +470,59 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 	}
 
 	// get atv_pub and atv_data then create shared secret
-	memcpy(atv_pub, content, ed25519_public_key_size);
-	atv_data = malloc(atv_len - ed25519_public_key_size);
-	memcpy(atv_data, content + ed25519_public_key_size, atv_len - ed25519_public_key_size);
+	memcpy(atv_pub, content, PUBLIC_KEY_SIZE);
+	atv_data = malloc(atv_len - PUBLIC_KEY_SIZE);
+	memcpy(atv_data, content + PUBLIC_KEY_SIZE, atv_len - PUBLIC_KEY_SIZE);
+#ifdef USE_CURVE25519
 	curve25519_dh_CreateSharedKey(shared_secret, atv_pub, verify_secret);
+#else	
+	EVP_PKEY* peer_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, atv_pub, PUBLIC_KEY_SIZE);
+	EVP_PKEY_CTX* evp_ctx = EVP_PKEY_CTX_new(priv_key, NULL);
+	EVP_PKEY_derive_init(evp_ctx);
+	EVP_PKEY_derive_set_peer(evp_ctx, peer_key);
+	size = SECRET_KEY_SIZE;
+	EVP_PKEY_derive(evp_ctx, shared_secret, &size);
+	EVP_PKEY_CTX_free(evp_ctx);
+	EVP_PKEY_free(peer_key);
+	EVP_PKEY_free(priv_key);
+#endif
 	free(content);
 
 	// build AES-key & AES-iv from shared secret digest
 	SHA512_Init(&digest);
 	SHA512_Update(&digest, "Pair-Verify-AES-Key", strlen("Pair-Verify-AES-Key"));
-	SHA512_Update(&digest, shared_secret, ed25519_secret_key_size);
+	SHA512_Update(&digest, shared_secret, SECRET_KEY_SIZE);
 	SHA512_Final(buf, &digest);
 	memcpy(aes_key, buf, 16);
 
 	SHA512_Init(&digest);
 	SHA512_Update(&digest, "Pair-Verify-AES-IV", strlen("Pair-Verify-AES-IV"));
-	SHA512_Update(&digest, shared_secret, ed25519_secret_key_size);
+	SHA512_Update(&digest, shared_secret, SECRET_KEY_SIZE);
 	SHA512_Final(buf, &digest);
 	memcpy(aes_iv, buf, 16);
 
 	// sign the verify_pub and atv_pub
-	memcpy(buf, verify_pub, ed25519_public_key_size);
-	memcpy(buf + ed25519_public_key_size, atv_pub, ed25519_public_key_size);
-	ed25519_SignMessage(signed_keys, auth_priv, NULL, buf, ed25519_public_key_size * 2);
+	memcpy(buf, verify_pub, PUBLIC_KEY_SIZE);
+	memcpy(buf + PUBLIC_KEY_SIZE, atv_pub, PUBLIC_KEY_SIZE);
+#ifdef USE_CURVE25519
+	ed25519_SignMessage(signed_keys, auth_priv, NULL, buf, PUBLIC_KEY_SIZE * 2);
+#else
+	EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
+	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, verify_secret, SECRET_KEY_SIZE);
+	EVP_DigestSignInit(md_ctx, NULL, NULL, NULL, priv_key);
+	EVP_DigestSign(md_ctx, signed_keys, &size, buf, 32);
+	EVP_MD_CTX_free(md_ctx);
+	EVP_PKEY_free(priv_key);
+#endif
 
 	// encrypt the signed result + atv_data, add 4 NULL bytes at the beginning
 	aes_ctr_init(&ctx, aes_key, aes_iv, CTR_BIG_ENDIAN);
-	memcpy(buf, atv_data, atv_len - ed25519_public_key_size);
-	aes_ctr_encrypt(&ctx, buf, atv_len - ed25519_public_key_size);
-	memcpy(buf + 4, signed_keys, ed25519_signature_size);
-	aes_ctr_encrypt(&ctx, buf + 4, ed25519_signature_size);
+	memcpy(buf, atv_data, atv_len - PUBLIC_KEY_SIZE);
+	aes_ctr_encrypt(&ctx, buf, atv_len - PUBLIC_KEY_SIZE);
+	memcpy(buf + 4, signed_keys, SIGNATURE_SIZE);
+	aes_ctr_encrypt(&ctx, buf + 4, SIGNATURE_SIZE);
 	memcpy(buf, "\x00\x00\x00\x00", 4);
-	len = ed25519_signature_size + 4;
+	len = SIGNATURE_SIZE + 4;
 	free(atv_data);
 
 	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf, len, 1, NULL, NULL, NULL, NULL, "/pair-verify")) {
@@ -497,25 +539,30 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 /*----------------------------------------------------------------------------*/
 bool rtspcl_auth_setup(struct rtspcl_s *p)
 {
-	u8_t pub_key[ed25519_public_key_size], secret[ed25519_secret_key_size];
-	u8_t *buf, *rsp;
+	uint8_t pub_key[PUBLIC_KEY_SIZE], secret[SECRET_KEY_SIZE];
+	uint8_t *buf, *rsp;
 	int rsp_len;
 
 	if (!p) return false;
 
 	// create a verification public key
-	RAND_bytes(secret, ed25519_secret_key_size);
-	VALGRIND_MAKE_MEM_DEFINED(secret, ed25519_secret_key_size);
+	RAND_bytes(secret, SECRET_KEY_SIZE);
+	VALGRIND_MAKE_MEM_DEFINED(secret, SECRET_KEY_SIZE);
+#ifdef USE_CURVE25519
 	curve25519_dh_CalculatePublicKey(pub_key, secret);
-
+#else
+	EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, secret, 32);
+	size_t size = PUBLIC_KEY_SIZE;
+	EVP_PKEY_get_raw_public_key(key, pub_key, &size);
+#endif
 
 	// POST the auth_pub and verify_pub concataned
-	buf = malloc(1 + ed25519_public_key_size);
+	buf = malloc(1 + PUBLIC_KEY_SIZE);
 	memcpy(buf, "\x01", 1);
-	memcpy(buf + 1, pub_key, ed25519_public_key_size);
+	memcpy(buf + 1, pub_key, PUBLIC_KEY_SIZE);
 
 	if (!exec_request(p, "POST", "application/octet-stream", (char*) buf,
-					  ed25519_public_key_size+1, 1, NULL, NULL, (char**) &rsp, &rsp_len, "/auth-setup")) {
+					  PUBLIC_KEY_SIZE+1, 1, NULL, NULL, (char**) &rsp, &rsp_len, "/auth-setup")) {
 		LOG_ERROR("[%p]: auth-setup failed", p);
 		free(buf);
 		return false;
@@ -529,7 +576,7 @@ bool rtspcl_auth_setup(struct rtspcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_flush(struct rtspcl_s *p, u16_t seq_number, u32_t timestamp)
+bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp)
 {
 	bool rc;
 	key_data_t hds[2];
@@ -537,7 +584,7 @@ bool rtspcl_flush(struct rtspcl_s *p, u16_t seq_number, u32_t timestamp)
 	if(!p) return false;
 
 	hds[0].key	= "RTP-Info";
-	hds[0].data	= _aprintf("seq=%u;rtptime=%u", (unsigned) seq_number, (unsigned) timestamp);
+	asprintf(&hds[0].data, "seq=%u;rtptime=%u", (unsigned) seq_number, (unsigned) timestamp);
 	if (!hds[0].data) return false;
 	hds[1].key	= NULL;
 
@@ -569,12 +616,12 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	char buf[128];
 	const char delimiters[] = " ";
 	char *token,*dp;
-	int i,j, rval, len, clen;
+	int i, rval, len, clen;
 	int timeout = 10000; // msec unit
 	struct pollfd pfds;
 	key_data_t lkd[MAX_KD], *pkd;
 
-	if(!rtspcld || rtspcld->fd == -1) return false;
+	if (!rtspcld || rtspcld->fd == -1) return false;
 
 	pfds.fd = rtspcld->fd;
 	pfds.events = POLLOUT;
@@ -624,6 +671,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 	rval = send(rtspcld->fd, req, len, 0);
 	LOG_DEBUG( "[%p]: ----> : write %s", rtspcld, req );
+LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 	free(req);
 
 	if (rval != len) {
@@ -663,6 +711,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 		timeout = 1000; // once it started, it shouldn't take a long time
 
 		if (i && line[0] == ' ') {
+			size_t j;
 			for(j = 0; j < strlen(line); j++) if (line[j] != ' ') break;
 			pkd[i].data = strdup(line + j);
 			continue;
