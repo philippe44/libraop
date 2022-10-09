@@ -66,4 +66,6 @@ Win32
 # CMake build folder
 /build/
 .vs/
-
+*.bak
+*.user
+lib/

@@ -1,12 +1,12 @@
-[submodule "alac"]
-	path = alac
-	url = https://github.com/philippe44/alac
-[submodule "openssl"]
-	path = openssl
-	url = https://github.com/philippe44/openssl
 [submodule "pthreads4w"]
 	path = pthreads4w
 	url = https://github.com/philippe44/pthreads4w
 [submodule "curve25519"]
 	path = curve25519
 	url = https://github.com/philippe44/curve25519
+[submodule "libopenssl"]
+	path = libopenssl
+	url = https://github.com/Philippe44/libopenssl
+[submodule "libcodecs"]
+	path = libcodecs
+	url = https://github.com/Philippe44/libcodecs

@@ -1,60 +1,81 @@
-CFLAGS 		+= -Wno-multichar -fdata-sections -ffunction-sections 
+ifeq ($(CC),cc)
+CC=$(lastword $(subst /, ,$(shell readlink -f `which cc`)))
+endif
+
+PLATFORM ?= $(firstword $(subst -, ,$(CC)))
+HOST ?= $(word 2, $(subst -, ,$(CC)))
+
+SRC 		= src
+BIN			= bin/cliraop-$(PLATFORM)
+LIB			= lib/$(HOST)/$(PLATFORM)/libraop.a
+BUILDDIR	= build/$(PLATFORM)
+
+DEFINES  = -DNDEBUG -D_GNU_SOURCE
+CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
+LDFLAGS += -s -lpthread -ldl -lm -lrt -lstdc++ -L. 
 
 ifeq ($(OS),Darwin)
-LINKSTATIC	=
 LDFLAGS 	+= -Wl,-dead_strip
 else
-LINKSTATIC 	= -static
 LDFLAGS 	+= -Wl,--gc-sections
 endif
 
-TOOLS		= ./tools
-VALGRIND	= ../valgrind
-ALAC		= ../alac
-SRC 		= ./src
-CURVE25519	= ../curve25519/source
+TOOLS		= tools
+#VALGRIND	= ../valgrind
+CODECS		= libcodecs/targets
+OPENSSL		= libopenssl/targets/$(HOST)/$(PLATFORM)
 
-LIBRARY 	=
-DEFINES 	= 
-
-vpath %.c $(TOOLS):$(SRC):$(ALAC):$(CURVE25519)
-vpath %.cpp $(TOOLS):$(SRC):$(ALAC):$(CURVE25519)
+vpath %.c $(TOOLS):$(SRC)
+vpath %.cpp $(TOOLS):$(SRC)
 
 INCLUDE = -I. \
 		  -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
-		  -I$(TOOLS) -I$(ALAC) \
-		  -I$(SRC) -I$(SRC)/inc \
-		  -I$(CURVE25519) -I$(CURVE25519)/include
+		  -I$(TOOLS) \
+		  -I$(OPENSSL)/include \
+		  -I$(CODECS)/include/alac \
+		  -I$(SRC) -I$(SRC)/inc
+		  
+CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
+                     ed25519_sign.c ed25519_verify.c \		  
 
-SOURCES = log_util.c raop_client.c rtsp_client.c \
-		  aes.c aexcl_lib.c base64.c alac_wrapper.cpp aes_ctr.c \
-		  ag_dec.c ag_enc.c ALACBitUtilities.c ALACEncoder.cpp dp_enc.c EndianPortable.c matrix_enc.c \
-		  curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
-		  ed25519_sign.c ed25519_verify.c \
-		  sslshim.c \
-		  raop_play.c 
-		
-OBJECTS = $(patsubst %.c,$(OBJ)/%.o,$(filter %.c,$(SOURCES))) $(patsubst %.cpp,$(OBJ)/%.o,$(filter %.cpp,$(SOURCES)))
+SOURCES = raop_client.c rtsp_client.c \
+		  aes.c aexcl_lib.c base64.c alac_wrapper.cpp aes_ctr.c
+		  
+SOURCES_BIN = log_util.c sslsym.c cliraop.c 		  
+		  
+OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES) $(SOURCES_BIN)))
+OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES) $(SOURCES_BIN)))
 
-all: $(EXECUTABLE)
+LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a
 
-$(EXECUTABLE): $(OBJECTS)
-	$(CC) $(OBJECTS) $(LIBRARY) $(LDFLAGS) -o $@
+ifneq ($(STATIC),)
+LIBRARY	+= $(OPENSSL)/libopenssl.a
+DEFINES += -DLINKALL
+endif
 
-$(OBJECTS): | bin $(OBJ)
-
-$(OBJ):
-	@mkdir -p $@
-	
-bin:	
+all: $(BIN) lib
+lib: directory $(LIB)
+directory:
 	@mkdir -p bin
+	@mkdir -p lib/$(HOST)/$(PLATFORM)	
+	@mkdir -p $(BUILDDIR)
 
-$(OBJ)/%.o : %.c
+$(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB)
+	echo $^
+	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
+	
+$(LIB): $(OBJECTS)
+	$(AR) rcs $@ $^
+
+$(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
 	
-$(OBJ)/%.o : %.cpp
+$(BUILDDIR)/%.o : %.cpp
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
-	
-clean:
-	rm -f $(OBJECTS) $(EXECUTABLE) 
+
+cleanlib:
+	rm -f $(BUILDDIR)/*.o $(LIB) 
+
+clean: cleanlib
+	rm -f $(BIN)	
 

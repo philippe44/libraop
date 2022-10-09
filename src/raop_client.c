@@ -126,21 +126,13 @@ typedef struct {
 	ntp_t ref_time;
 	ntp_t recv_time;
 	ntp_t send_time;
-#if WIN
-} rtp_time_pkt_t;
-#else
 } __attribute__ ((packed)) rtp_time_pkt_t;
-#endif
 
 typedef struct {
 	rtp_header_t hdr;
 	uint16_t seq_number;
 	uint16_t n;
-#if WIN
-} rtp_lost_pkt_t;
-#else
 } __attribute__ ((packed)) rtp_lost_pkt_t;
-#endif
 
 typedef struct raopcl_s {
 	struct rtspcl_s *rtspcl;
@@ -245,7 +237,7 @@ uint64_t raopcl_get_ntp(struct ntp_s* ntp)
 	tv.tv_sec = (long)(tmpres / 1000000UL);
 	tv.tv_usec = (long)(tmpres % 1000000UL);
 #else
-	gettimeofday(&ctv, NULL);
+	gettimeofday(&tv, NULL);
 #endif
 
 	local.seconds = tv.tv_sec + 0x83AA7E80;
@@ -470,7 +462,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 			// search pause_ts in backlog, it should be backward, not too far
 			for (n = p->seq_number, i = 0;
 				 i < MAX_BACKLOG && p->backlog[n % MAX_BACKLOG].timestamp > p->pause_ts;
-				 i++, n--);
+				 i++, n--) { };
 
 			 // the resend shall go up to (including) pause_ts
 			 n = (n - chunks + 1) % MAX_BACKLOG;
@@ -702,9 +694,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 		return NULL;
 	}
 
-	// seed random generator
 	raopcld = malloc(sizeof(raopcl_data_t));
-	RAND_seed(raopcld, sizeof(raopcl_data_t));
 	memset(raopcld, 0, sizeof(raopcl_data_t));
 
 	//  raopcld->sane is set to 0

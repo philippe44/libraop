@@ -267,7 +267,7 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 	port->audio.rport = 0;
 
 	hds[0].key = "Transport";
-	asprintf(&hds[0].data, "RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%d;timing_port=%d",
+	(void)! asprintf(&hds[0].data, "RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%d;timing_port=%d",
 							(unsigned) port->ctrl.lport, (unsigned) port->time.lport);
 	if (!hds[0].data) return false;
 	hds[1].key = NULL;
@@ -304,7 +304,7 @@ bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, ke
 	hds[0].key 	= "Range";
 	hds[0].data = "npt=0-";
 	hds[1].key 	= "RTP-Info";
-	asprintf(&hds[1].data, "seq=%u;rtptime=%u", (unsigned) start_seq, (unsigned) start_ts);
+	(void)! asprintf(&hds[1].data, "seq=%u;rtptime=%u", (unsigned) start_seq, (unsigned) start_ts);
 	if (!hds[1].data) return false;
 	hds[2].key	= NULL;
 
@@ -365,7 +365,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list 
 	// set mandatory headers first, the final size will be set at the end
 	q = (char*) memcpy(q, "mlit", 4) + 8;
 	q = (char*) memcpy(q, "mikd", 4) + 4;
-	for (i = 0; i < 3; i++) *q++ = 0; *q++ = 1;
+	for (i = 0; i < 3; i++) { *q++ = 0; } *q++ = 1;
 	*q++ = 2;
 
 	while (count-- && (q-str) < 1024) {
@@ -389,7 +389,7 @@ bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list 
 			case 'i': {
 				int data;
 				data = va_arg(args, int);
-				for (i = 0; i < 3; i++) *q++ = 0; *q++ = 2;
+				for (i = 0; i < 3; i++) { *q++ = 0; } *q++ = 2;
 				*q++ = (data >> 8); *q++ = data;
 				break;
 			}
@@ -584,7 +584,7 @@ bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp)
 	if(!p) return false;
 
 	hds[0].key	= "RTP-Info";
-	asprintf(&hds[0].data, "seq=%u;rtptime=%u", (unsigned) seq_number, (unsigned) timestamp);
+	(void)! asprintf(&hds[0].data, "seq=%u;rtptime=%u", (unsigned) seq_number, (unsigned) timestamp);
 	if (!hds[0].data) return false;
 	hds[1].key	= NULL;
 

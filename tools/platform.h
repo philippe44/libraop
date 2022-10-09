@@ -64,17 +64,21 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <errno.h>
-#include <memcheck.h>
+//#include <memcheck.h>
+#define VALGRIND_MAKE_MEM_DEFINED(p,n)
 
 #define last_error() errno
 #define ERROR_WOULDBLOCK EWOULDBLOCK
 
-int SendARP(in_addr_t src, in_addr_t dst, u8_t mac[], u32_t *size);
+int SendARP(in_addr_t src, in_addr_t dst, uint8_t mac[], uint32_t *size);
 #define fresize(f,s) ftruncate(fileno(f), s)
 char *strlwr(char *str);
 #define _random(x) random()
-char *GetTempPath(u16_t size, char *path);
+char *GetTempPath(uint16_t size, char *path);
 #define closesocket close
+
+#define min(a,b) ((a) < (b) ? (a) : (b))
+#define max(a,b) ((a) < (b) ? (b) : (a))
 
 #endif
 
@@ -99,6 +103,7 @@ int asprintf(char** s, const char* fmt, ...);
 int vasprintf(char** strp, const char* fmt, va_list args);
 
 #define VALGRIND_MAKE_MEM_DEFINED(x,y)
+#define __attribute__(X)
 
 typedef uint32_t in_addr_t;
 #define socklen_t int

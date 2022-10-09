@@ -113,32 +113,20 @@ typedef struct {
 	uint8_t proto;
 	uint8_t type;
 	uint8_t seq[2];
-#if WIN
-} rtp_header_t;
-#else
 } __attribute__ ((packed)) rtp_header_t;
-#endif
 
 typedef struct {
 	rtp_header_t hdr;
 	uint32_t 	rtp_timestamp_latency;
 	ntp_t   curr_time;
 	uint32_t   rtp_timestamp;
-#if WIN
-} rtp_sync_pkt_t;
-#else
 } __attribute__ ((packed)) rtp_sync_pkt_t;
-#endif
 
 typedef struct {
 	rtp_header_t hdr;
 	uint32_t timestamp;
 	uint32_t ssrc;
-#if WIN
-} rtp_audio_pkt_t;
-#else
 } __attribute__ ((packed)) rtp_audio_pkt_t;
-#endif
 
 uint64_t raopcl_get_ntp(struct ntp_s* ntp);
 
