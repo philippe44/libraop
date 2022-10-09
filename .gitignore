@@ -69,3 +69,4 @@ Win32
 *.bak
 *.user
 lib/
+bin/*.pdb

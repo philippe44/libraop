@@ -1,8 +1,0 @@
-CFLAGS  ?= -Wall -Wno-multichar -Wno-unused-but-set-variable -fPIC -ggdb -O2 $(OPTS) $(INCLUDE) $(DEFINES)
-LDFLAGS ?= -s -lpthread -lcrypto -ldl -lm -lrt -lstdc++ -L. 
-
-OBJ			= bin/x86
-EXECUTABLE 	= bin/raop_play-x86
-
-include Makefile
-

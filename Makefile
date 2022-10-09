@@ -43,8 +43,8 @@ SOURCES = raop_client.c rtsp_client.c \
 		  
 SOURCES_BIN = log_util.c sslsym.c cliraop.c 		  
 		  
-OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES) $(SOURCES_BIN)))
-OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES) $(SOURCES_BIN)))
+OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES)))
+OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES)))
 
 LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a
 
@@ -53,18 +53,19 @@ LIBRARY	+= $(OPENSSL)/libopenssl.a
 DEFINES += -DLINKALL
 endif
 
-all: $(BIN) lib
+all: lib $(BIN)
 lib: directory $(LIB)
 directory:
 	@mkdir -p bin
 	@mkdir -p lib/$(HOST)/$(PLATFORM)	
 	@mkdir -p $(BUILDDIR)
 
-$(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB)
+$(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB) 
 	echo $^
 	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
 	
 $(LIB): $(OBJECTS)
+	echo LIB $^
 	$(AR) rcs $@ $^
 
 $(BUILDDIR)/%.o : %.c

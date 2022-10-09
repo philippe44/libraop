@@ -37,7 +37,8 @@
 #endif
 #endif
 
-#include "aexcl_lib.h"
+#include "platform.h"
+#include "log_util.h"
 #include "raop_client.h"
 #include "alac_wrapper.h"
 #include "sslsym.h"
