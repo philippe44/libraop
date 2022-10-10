@@ -33,14 +33,18 @@ do
 	done
 done
 
-if [[ -n $clean ]]; then
-	action="cleanlib"
+# do we want library only (can be used to rebuild as a submodule and not mess us bin/ directory)
+if [[ $@[*]} =~ --libonly ]]; then
+	if [[ -n $clean ]]; then
+		action="cleanlib"
+	else
+		action="lib"	
+	fi	
 else
-	action="lib"	
-fi
+	action=$clean	
+fi	
 
-item = raop
-declare -a headers=( raop_client.h )
+item=raop
 
 # then iterate selected platforms/compilers
 for cc in ${compilers[@]}
@@ -59,7 +63,7 @@ do
 	if [[ -z $clean ]]; then
 		cp lib/$host/$platform/lib$item.a $target		
 		cp -u src/raop_client.h targets/include
-			rm -f $target/lib$item.a
-		fi	
-	done	
+	else	
+		rm -f $target/lib$item.a
+	fi	
 done

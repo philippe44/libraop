@@ -39,7 +39,7 @@ CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve
                      ed25519_sign.c ed25519_verify.c \		  
 
 SOURCES = raop_client.c rtsp_client.c \
-		  aes.c aexcl_lib.c base64.c alac_wrapper.cpp aes_ctr.c
+		  aes.c aexcl_lib.c base64.c aes_ctr.c
 		  
 SOURCES_BIN = log_util.c sslsym.c cliraop.c 		  
 		  
@@ -61,11 +61,9 @@ directory:
 	@mkdir -p $(BUILDDIR)
 
 $(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB) 
-	echo $^
 	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
 	
 $(LIB): $(OBJECTS)
-	echo LIB $^
 	$(AR) rcs $@ $^
 
 $(BUILDDIR)/%.o : %.c

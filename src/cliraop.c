@@ -22,6 +22,8 @@
 #include <stdio.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
 #include "platform.h"
 
 #if WIN
@@ -37,7 +39,6 @@
 #endif
 #endif
 
-#include "platform.h"
 #include "log_util.h"
 #include "raop_client.h"
 #include "alac_wrapper.h"
