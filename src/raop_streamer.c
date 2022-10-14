@@ -1,5 +1,5 @@
 /*
- * RAOP - streamer and slave-clocked replay engine
+ * RAOP : simulate an airplay device, streamer and slave-clocked replay engine
  * 
  * Copyright (c) James Laird 2011
  * (c) Philippe, philippe_44@outlook.com
