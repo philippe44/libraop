@@ -22,24 +22,30 @@ endif
 
 TOOLS		= crosstools/src
 #VALGRIND	= ../valgrind
+DMAP_PARSER	= dmap-parser
+MDNS		= libmdns/targets
 CODECS		= libcodecs/targets
 OPENSSL		= libopenssl/targets/$(HOST)/$(PLATFORM)
 
-vpath %.c $(TOOLS):$(SRC)
+vpath %.c $(TOOLS):$(SRC):$(DMAP_PARSER)
 vpath %.cpp $(TOOLS):$(SRC)
 
 INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
 	  -I$(TOOLS) \
+	  -I$(DMAP_PARSER) \
+	  -I$(MDNS)/include/tinysvcmdns -I$(MDNS)/include/mdnssd \
 	  -I$(OPENSSL)/include \
-	  -I$(CODECS)/include/addons \
+	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac -I$(CODECS)/include/shine \
 	  -I$(SRC) -I$(SRC)/inc
 		  
 CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
                      ed25519_sign.c ed25519_verify.c \		  
 
 SOURCES = raop_client.c rtsp_client.c \
-		  aes.c base64.c aes_ctr.c \
-		  alac.c 
+	  raop_server.c raop_streamer.c \
+	  aes.c base64.c aes_ctr.c base64.c \
+	  dmap_parser.c	\
+	  alac.c 
 		  
 SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c 		  
 		  

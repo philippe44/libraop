@@ -352,7 +352,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 	}
 
 	memset(fmtp, 0, sizeof(fmtp));
-	for (int i = 0; arg = strsep(&fmtpstr, " \t"); i++) fmtp[i] = atoi(arg);
+	for (int i = 0; (arg = strsep(&fmtpstr, " \t")); i++) fmtp[i] = atoi(arg);
 
 	ctx->frame_size = fmtp[1];
 	ctx->silence_frame = (char*) calloc(ctx->frame_size, 4);
