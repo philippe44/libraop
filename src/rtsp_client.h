@@ -22,8 +22,17 @@
  #ifndef __RTSP_CLIENT_H
 #define __RTSP_CLIENT_H
 
-struct rtspcl_s;
-struct rtp_port_s;
+typedef struct sock_info_s {
+	int fd;
+	uint16_t lport;
+	uint16_t rport;
+} sock_info_t;
+
+typedef struct rtp_port_s {
+	sock_info_t time;
+	sock_info_t	ctrl;
+	sock_info_t audio;
+} rtp_port_t;
 
 struct rtspcl_s *rtspcl_create(char* user_name);
 bool   			rtspcl_destroy(struct rtspcl_s *p);

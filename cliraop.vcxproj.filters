@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\cliraop.c" />
+    <ClCompile Include="crosstools\src\cross_log.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+    <ClCompile Include="crosstools\src\cross_net.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+    <ClCompile Include="crosstools\src\cross_ssl.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+    <ClCompile Include="crosstools\src\cross_thread.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+    <ClCompile Include="crosstools\src\cross_util.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+    <ClCompile Include="crosstools\src\platform.c">
+      <Filter>crosstools</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="libcodecs\targets\win32\x86\libcodecs.lib" />
+    <Library Include="pthreads4w\targets\win32\x86\libpthreadVC3.lib" />
+    <Library Include="lib\win32\x86\libraoptools.lib" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="crosstools">
+      <UniqueIdentifier>{f63c4eff-35cb-48b9-92a1-2f72d1af8c17}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

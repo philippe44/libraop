@@ -19,6 +19,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
  *****************************************************************************/
 #include <stdio.h>
+#include <string.h>
 #include "platform.h"
 
 #include <openssl/rand.h>
@@ -30,7 +31,9 @@
 #include <limits.h>
 
 #include "alac_wrapper.h"
-#include "aexcl_lib.h"
+#include "cross_net.h"
+#include "cross_log.h"
+
 #include "rtsp_client.h"
 #include "raop_client.h"
 #include "base64.h"
@@ -715,7 +718,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	strcpy(raopcld->active_remote, active_remote ? active_remote : "");
 	raopcld->host_addr = host;
 	raopcld->rtp_ports.ctrl.fd = raopcld->rtp_ports.time.fd = raopcld->rtp_ports.audio.fd = -1;
-	raopcld->seq_number = random();
+	raopcld->seq_number = rand();
 
 	if (md && strchr(md, '0')) raopcld->md_caps |= MD_TEXT;
 	if (md && strchr(md, '1')) raopcld->md_caps |= MD_ARTWORK;
@@ -880,9 +883,9 @@ static bool raopcl_set_sdp(struct raopcl_s *p, char *sdp)
 
 			i = rsa_encrypt(p->key, 16, rsakey);
 			base64_encode(rsakey, i, &key);
-			remove_char_from_string(key, '=');
+			strremovechar(key, '=');
 			base64_encode(p->iv, 16, &iv);
-			remove_char_from_string(iv, '=');
+			strremovechar(iv, '=');
 			buf = malloc(strlen(key) + strlen(iv) + 128);
 			sprintf(buf, "a=rsaaeskey:%s\r\n"
 						"a=aesiv:%s\r\n",
@@ -968,7 +971,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	char sid[10+1], sci[16+1];
 	char *sac = NULL;
 	char sdp[1024];
-	key_data_t kd[MAX_KD];
+	key_data_t kd[64];
 	char *buf;
 	struct {
 		uint16_t count, offset;
@@ -1041,7 +1044,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	// RTSP ANNOUNCE
 	if (p->auth && p->crypto) {
 		base64_encode(&seed.sac, 16, &sac);
-		remove_char_from_string(sac, '=');
+		strremovechar(sac, '=');
 		if (!rtspcl_add_exthds(p->rtspcl, "Apple-Challenge", sac)) goto erexit;
 		if (!rtspcl_announce_sdp(p->rtspcl, sdp))goto erexit;
 		if (!rtspcl_mark_del_exthds(p->rtspcl, "Apple-Challenge")) goto erexit;
@@ -1064,7 +1067,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	// RTSP SETUP : get all RTP destination ports
 	if (!rtspcl_setup(p->rtspcl, &p->rtp_ports, kd)) goto erexit;
 	if (!raopcl_analyse_setup(p, kd)) goto erexit;
-	free_kd(kd);
+	kd_free(kd);
 
 	LOG_DEBUG( "[%p]:opened audio socket   l:%5d r:%d", p, p->rtp_ports.audio.lport, p->rtp_ports.audio.rport );
 	LOG_DEBUG( "[%p]:opened timing socket  l:%5d r:%d", p, p->rtp_ports.time.lport, p->rtp_ports.time.rport );
@@ -1077,7 +1080,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 
 		p->latency_frames = max((uint32_t) latency, p->latency_frames);
 	}
-	free_kd(kd);
+	kd_free(kd);
 
 	p->ctrl_running = true;
 	pthread_create(&p->ctrl_thread, NULL, _rtp_control_thread, (void*) p);
@@ -1094,7 +1097,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 
  erexit:
 	if (sac) free(sac);
-	free_kd(kd);
+	kd_free(kd);
 	_raopcl_disconnect(p, true);
 
 	return false;

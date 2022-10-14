@@ -1,0 +1,39 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.3.32901.215
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cliraop", "cliraop.vcxproj", "{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA} = {31FA7682-7D64-4B3F-99DD-5A3423D18DCA}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libraoptools", "libraoptools.vcxproj", "{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+		Static|x86 = Static|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Debug|x86.ActiveCfg = Debug|Win32
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Debug|x86.Build.0 = Debug|Win32
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Release|x86.ActiveCfg = Release|Win32
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Release|x86.Build.0 = Release|Win32
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Static|x86.ActiveCfg = Static|Win32
+		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Static|x86.Build.0 = Static|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Debug|x86.ActiveCfg = Debug|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Debug|x86.Build.0 = Debug|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Release|x86.ActiveCfg = Release|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Release|x86.Build.0 = Release|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Static|x86.ActiveCfg = Release|Win32
+		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Static|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4F7D16B4-16B7-40E4-8EC0-B8D23FC1FE54}
+	EndGlobalSection
+EndGlobal

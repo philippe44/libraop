@@ -6,8 +6,8 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= src
-BIN			= bin/cliraop-$(PLATFORM)
-LIB			= lib/$(HOST)/$(PLATFORM)/libraop.a
+BIN		= bin/cliraop-$(PLATFORM)
+LIB		= lib/$(HOST)/$(PLATFORM)/libraop.a
 BUILDDIR	= build/$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
@@ -20,7 +20,7 @@ else
 LDFLAGS 	+= -Wl,--gc-sections
 endif
 
-TOOLS		= tools
+TOOLS		= crosstools/src
 #VALGRIND	= ../valgrind
 CODECS		= libcodecs/targets
 OPENSSL		= libopenssl/targets/$(HOST)/$(PLATFORM)
@@ -28,20 +28,20 @@ OPENSSL		= libopenssl/targets/$(HOST)/$(PLATFORM)
 vpath %.c $(TOOLS):$(SRC)
 vpath %.cpp $(TOOLS):$(SRC)
 
-INCLUDE = -I. \
-		  -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
-		  -I$(TOOLS) \
-		  -I$(OPENSSL)/include \
-		  -I$(CODECS)/include/alac \
-		  -I$(SRC) -I$(SRC)/inc
+INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
+	  -I$(TOOLS) \
+	  -I$(OPENSSL)/include \
+	  -I$(CODECS)/include/addons \
+	  -I$(SRC) -I$(SRC)/inc
 		  
 CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
                      ed25519_sign.c ed25519_verify.c \		  
 
 SOURCES = raop_client.c rtsp_client.c \
-		  aes.c aexcl_lib.c base64.c aes_ctr.c
+		  aes.c base64.c aes_ctr.c \
+		  alac.c 
 		  
-SOURCES_BIN = log_util.c sslsym.c cliraop.c 		  
+SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c 		  
 		  
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES)))
 OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES)))

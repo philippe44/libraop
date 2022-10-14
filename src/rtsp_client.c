@@ -19,9 +19,8 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
  *****************************************************************************/
 #include <stdio.h>
-#include "platform.h"
+#include <string.h>
 #include <ctype.h>
-
 #include <openssl/rand.h>
 
 #ifdef USE_CURVE25519
@@ -31,14 +30,20 @@
 #include <openssl/sha.h>
 #endif
 
+#include "platform.h"
+
 #include "aes_ctr.h"
-#include "aexcl_lib.h"
+#include "cross_net.h"
+#include "cross_util.h"
+#include "cross_log.h"
 #include "rtsp_client.h"
 
 #define PUBLIC_KEY_SIZE 32
 #define SECRET_KEY_SIZE 32
 #define PRIVATE_KEY_SIZE 64
 #define SIGNATURE_SIZE	64
+
+#define MAX_KD 64
 
 typedef struct rtspcl_s {
     int fd;
@@ -53,27 +58,18 @@ typedef struct rtspcl_s {
 extern log_level 	raop_loglevel;
 static log_level	*loglevel = &raop_loglevel;
 
-//trim string
-static char *trim(char *s);
-static char *rtrim(char *s);
-static char *ltrim(char *s);
-
 static bool exec_request(rtspcl_t *rtspcld, char *cmd, char *content_type,
 			 char *content, int length, int get_response, key_data_t *hds,
 			 key_data_t *kd, char **resp_content, int *resp_len,
 			 char* url);
 
-
 /*----------------------------------------------------------------------------*/
-int rtspcl_get_serv_sock(struct rtspcl_s *p)
-{
+int rtspcl_get_serv_sock(struct rtspcl_s *p) {
 	return p->fd;
 }
 
-
 /*----------------------------------------------------------------------------*/
-struct rtspcl_s *rtspcl_create(char *useragent)
-{
+struct rtspcl_s *rtspcl_create(char *useragent) {
 	rtspcl_t *rtspcld;
 
 	rtspcld = malloc(sizeof(rtspcl_t));
@@ -83,10 +79,8 @@ struct rtspcl_s *rtspcl_create(char *useragent)
 	return rtspcld;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_is_connected(struct rtspcl_s *p)
-{
+bool rtspcl_is_connected(struct rtspcl_s *p) {
 	if (p->fd == -1) return false;
 
 	return rtspcl_is_sane(p);
@@ -94,8 +88,7 @@ bool rtspcl_is_connected(struct rtspcl_s *p)
 
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_is_sane(struct rtspcl_s *p)
-{
+bool rtspcl_is_sane(struct rtspcl_s *p) {
 	int n;
 	struct pollfd pfds;
 
@@ -104,27 +97,21 @@ bool rtspcl_is_sane(struct rtspcl_s *p)
 
 	if (p->fd == -1) return true;
 
-#if WIN
-	n = WSAPoll(&pfds, 1, 0);
-#else
 	n = poll(&pfds, 1, 0);
-#endif
 	if (n == -1 || (pfds.revents & POLLERR) || (pfds.revents & POLLHUP)) return false;
 
 	return true;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, uint16_t destport, char *sid)
-{
+bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, uint16_t destport, char *sid) {
 	struct sockaddr_in name;
 	socklen_t namelen = sizeof(name);
 
 	if (!p) return false;
 
 	p->session = NULL;
-	if ((p->fd = open_tcp_socket(local, NULL)) == -1) return false;
+	if ((p->fd = open_tcp_socket(local, NULL, true)) == -1) return false;
 	if (!get_tcp_connect_by_host(p->fd, host, destport)) return false;
 
 	getsockname(p->fd, (struct sockaddr*)&name, &namelen);
@@ -135,10 +122,8 @@ bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr hos
 	return true;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_disconnect(struct rtspcl_s *p)
-{
+bool rtspcl_disconnect(struct rtspcl_s *p) {
 	bool rc = true;
 
 	if (!p) return false;
@@ -153,10 +138,8 @@ bool rtspcl_disconnect(struct rtspcl_s *p)
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_destroy(struct rtspcl_s *p)
-{
+bool rtspcl_destroy(struct rtspcl_s *p) {
 	bool rc;
 
 	if (!p) return false;
@@ -169,10 +152,8 @@ bool rtspcl_destroy(struct rtspcl_s *p)
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_add_exthds(struct rtspcl_s *p, char *key, char *data)
-{
+bool rtspcl_add_exthds(struct rtspcl_s *p, char *key, char *data) {
 	int i = 0;
 
 	if (!p) return false;
@@ -196,10 +177,8 @@ bool rtspcl_add_exthds(struct rtspcl_s *p, char *key, char *data)
 	return true;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_mark_del_exthds(struct rtspcl_s *p, char *key)
-{
+bool rtspcl_mark_del_exthds(struct rtspcl_s *p, char *key) {
 	int i = 0;
 
 	if (!p) return false;
@@ -217,10 +196,8 @@ bool rtspcl_mark_del_exthds(struct rtspcl_s *p, char *key)
 	return false;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_remove_all_exthds(struct rtspcl_s *p)
-{
+bool rtspcl_remove_all_exthds(struct rtspcl_s *p) {
 	int i = 0;
 
 	if (!p) return false;
@@ -235,10 +212,8 @@ bool rtspcl_remove_all_exthds(struct rtspcl_s *p)
 	return true;
 }
 
-
 /*----------------------------------------------------------------------------*/
-char* rtspcl_local_ip(struct rtspcl_s *p)
-{
+char* rtspcl_local_ip(struct rtspcl_s *p) {
 	static char buf[16];
 
 	if (!p) return NULL;
@@ -246,19 +221,15 @@ char* rtspcl_local_ip(struct rtspcl_s *p)
 	return strcpy(buf, inet_ntoa(p->local_addr));
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp)
-{
+bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp) {
 	if(!p) return false;
 
 	return exec_request(p, "ANNOUNCE", "application/sdp", sdp, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
-{
+bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd) {
 	key_data_t hds[2];
 	char *temp;
 
@@ -276,21 +247,19 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd)
 	free(hds[0].data);
 
 	if ((temp = kd_lookup(rkd, "Session")) != NULL) {
-		p->session = strdup(trim(temp));
+		p->session = strdup(strtrim(temp));
 		LOG_DEBUG("[%p]: <------ : session:%s", p, p->session);
 		return true;
 	}
 	else {
-		free_kd(rkd);
+		kd_free(rkd);
 		LOG_ERROR("[%p]: no session in response", p);
 		return false;
 	}
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, key_data_t *rkd)
-{
+bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, key_data_t *rkd) {
 	bool rc;
 	key_data_t hds[3];
 
@@ -314,19 +283,15 @@ bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, ke
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_parameter(struct rtspcl_s *p, char *param)
-{
+bool rtspcl_set_parameter(struct rtspcl_s *p, char *param) {
 	if (!p) return false;
 
 	return exec_request(p, "SET_PARAMETER", "text/parameters", param, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_artwork(struct rtspcl_s *p, uint32_t timestamp, char *content_type, int size, char *image)
-{
+bool rtspcl_set_artwork(struct rtspcl_s *p, uint32_t timestamp, char *content_type, int size, char *image) {
 	key_data_t hds[2];
 	char rtptime[20];
 
@@ -341,10 +306,8 @@ bool rtspcl_set_artwork(struct rtspcl_s *p, uint32_t timestamp, char *content_ty
 	return exec_request(p, "SET_PARAMETER", content_type, image, size, 2, hds, NULL, NULL, NULL, NULL);
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list args)
-{
+bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list args) {
 	key_data_t hds[2];
 	char rtptime[20];
 	char *q, *str;
@@ -404,19 +367,15 @@ bool rtspcl_set_daap(struct rtspcl_s *p, uint32_t timestamp, int count, va_list 
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd)
-{
+bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd) {
 	if (!p) return false;
 
 	return exec_request(p, "OPTIONS", NULL, NULL, 0, 1, NULL, rkd, NULL, NULL, "*");
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
-{
+bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex) {
 	uint8_t auth_pub[PUBLIC_KEY_SIZE], auth_priv[PRIVATE_KEY_SIZE];
 	uint8_t verify_pub[PUBLIC_KEY_SIZE], verify_secret[SECRET_KEY_SIZE];
 	uint8_t atv_pub[PUBLIC_KEY_SIZE], *atv_data;
@@ -535,10 +494,8 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex)
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_auth_setup(struct rtspcl_s *p)
-{
+bool rtspcl_auth_setup(struct rtspcl_s *p) {
 	uint8_t pub_key[PUBLIC_KEY_SIZE], secret[SECRET_KEY_SIZE];
 	uint8_t *buf, *rsp;
 	int rsp_len;
@@ -574,10 +531,8 @@ bool rtspcl_auth_setup(struct rtspcl_s *p)
 	return true;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp)
-{
+bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp) {
 	bool rc;
 	key_data_t hds[2];
 
@@ -594,10 +549,8 @@ bool rtspcl_flush(struct rtspcl_s *p, uint16_t seq_number, uint32_t timestamp)
 	return rc;
 }
 
-
 /*----------------------------------------------------------------------------*/
-bool rtspcl_teardown(struct rtspcl_s *p)
-{
+bool rtspcl_teardown(struct rtspcl_s *p) {
 	if (!p) return false;
 
 	return exec_request(p, "TEARDOWN", NULL, NULL, 0, 1, NULL, NULL, NULL, NULL, NULL);
@@ -609,8 +562,7 @@ bool rtspcl_teardown(struct rtspcl_s *p)
  */
 static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type,
 				char *content, int length, int get_response, key_data_t *hds,
-				key_data_t *rkd, char **resp_content, int *resp_len, char* url)
-{
+				key_data_t *rkd, char **resp_content, int *resp_len, char* url) {
 	char line[2048];
 	char *req;
 	char buf[128];
@@ -671,7 +623,6 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 	rval = send(rtspcld->fd, req, len, 0);
 	LOG_DEBUG( "[%p]: ----> : write %s", rtspcld, req );
-LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 	free(req);
 
 	if (rval != len) {
@@ -680,7 +631,7 @@ LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 
 	if (!get_response) return true;
 
-	if (read_line(rtspcld->fd, line, sizeof(line), timeout, 0) <= 0) {
+	if (http_read_line(rtspcld->fd, line, sizeof(line), timeout, true) <= 0) {
 		if (get_response == 1) {
 			LOG_ERROR("[%p]: response : %s request failed", rtspcld, line);
 			return false;
@@ -706,7 +657,7 @@ LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 	else pkd = lkd;
 	pkd[0].key = NULL;
 
-	while (read_line(rtspcld->fd, line, sizeof(line), timeout, 0) > 0) {
+	while (http_read_line(rtspcld->fd, line, sizeof(line), timeout, true) > 0) {
 		LOG_DEBUG("[%p]: <------ : %s", rtspcld, line);
 		timeout = 1000; // once it started, it shouldn't take a long time
 
@@ -721,7 +672,7 @@ LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 
 		if (!dp){
 			LOG_ERROR("[%p]: Request failed, bad header", rtspcld);
-			free_kd(pkd);
+			kd_free(pkd);
 			return false;
 		}
 
@@ -756,27 +707,7 @@ LOG_ERROR("[%p]: ----> : write %s", rtspcld, req);
 	}
 
 	pkd[i].key = NULL;
-	if (!rkd) free_kd(pkd);
+	if (!rkd) kd_free(pkd);
 
 	return true;
-}
-
-
-char *ltrim(char *s)
-{
-	while(isspace(*s)) s++;
-	return s;
-}
-
-char *rtrim(char *s)
-{
-	char* back = s + strlen(s);
-	while(isspace(*--back));
-	*(back+1) = '\0';
-	return s;
-}
-
-char *trim(char *s)
-{
-    return rtrim(ltrim(s));
 }

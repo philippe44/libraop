@@ -160,7 +160,7 @@ void 	raopcl_pause(struct raopcl_s *p);
 void 	raopcl_stop(struct raopcl_s *p);
 
 /*
-	The are thread safe
+	These are thread safe
 */
 uint32_t 	raopcl_latency(struct raopcl_s *p);
 uint32_t 	raopcl_sample_rate(struct raopcl_s *p);

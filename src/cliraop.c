@@ -39,10 +39,11 @@
 #endif
 #endif
 
-#include "log_util.h"
 #include "raop_client.h"
-#include "alac_wrapper.h"
-#include "sslsym.h"
+#include "cross_net.h"
+#include "cross_ssl.h"
+#include "cross_util.h"
+#include "cross_log.h"
 
 #define SEC(ntp) ((uint32_t) ((ntp) >> 32))
 #define FRAC(ntp) ((uint32_t) (ntp))
@@ -146,29 +147,20 @@ static char _getch() {
 
 /*----------------------------------------------------------------------------*/
 static void init_platform(bool interactive) {
-#if WIN
-	WSADATA wsaData;
-	WORD wVersionRequested = MAKEWORD(2, 2);
-	int WSerr = WSAStartup(wVersionRequested, &wsaData);
-	if (WSerr != 0) exit(1);
-#else
+	netsock_init();
+#if !WIN
 	if (interactive) set_termio(false);
 #endif
-#ifndef LINKALL
-	load_ssl_symbols();
-#endif
+	cross_load_ssl();
 }
 
 /*----------------------------------------------------------------------------*/
 static void close_platform(bool interactive) {
-#if WIN
-	WSACleanup();
-#else
+	netsock_close();
+#if !WIN
 	if (interactive) set_termio(true);
 #endif
-#ifndef LINKALL
-	free_ssl_symbols();
-#endif
+	cross_free_ssl();
 }
 
 /*----------------------------------------------------------------------------*/
@@ -267,7 +259,6 @@ int main(int argc, char *argv[]) {
 		close_platform(interactive);
 		exit(1);
 	}
-
 
 #if WIN
 	setmode(infile, O_BINARY);
