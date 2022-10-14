@@ -161,8 +161,8 @@ typedef struct raopst_s {
 	alac_file *alac_codec;
 	int flush_seqno;
 	bool playing, silence, http_ready;
-	event_cb_t event_cb;
-	http_cb_t http_cb;
+	raopst_cb_t event_cb;
+	raop_http_cb_t http_cb;
 	void *owner;
 	char *http_tail;
 	size_t http_count;
@@ -292,7 +292,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 								char *aeskey, char *aesiv, char *fmtpstr,
 								short unsigned pCtrlPort, short unsigned pTimingPort,
 								void *owner,
-								event_cb_t event_cb, http_cb_t http_cb,
+								raopst_cb_t event_cb, raop_http_cb_t http_cb,
 								unsigned short port_base, unsigned short port_range,
 								int http_length)
 {

@@ -21,12 +21,12 @@ typedef struct raopsv_metadata_s {
 
 typedef enum { RAOP_STREAM, RAOP_PLAY, RAOP_FLUSH, RAOP_PAUSE, RAOP_STOP, RAOP_VOLUME } raopsr_event_t ;
 typedef void (*raopsr_cb_t)(void *owner, raopsr_event_t event, void *param);
-typedef void (*http_cb_t)(void *owner, struct key_data_s *headers, struct key_data_s *response);
+typedef void (*raop_http_cb_t)(void *owner, struct key_data_s *headers, struct key_data_s *response);
 
 struct raopsr_s* raopsr_create(struct in_addr host, struct mdnsd *svr, char *name,
 						  char *model, unsigned char mac[6], char *codec, bool metadata,
 						  bool drift, bool flush, char *latencies, void *owner,
-						  raopsr_cb_t raop_cb, http_cb_t http_cb,
+						  raopsr_cb_t raop_cb, raop_http_cb_t http_cb,
 						  unsigned short port_base, unsigned short port_range,
 						  int http_length);
 void		  raopsr_update(struct raopsr_s *ctx, char *name, char *model);

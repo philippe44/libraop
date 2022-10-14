@@ -43,7 +43,7 @@ typedef struct raopsr_s {
 	} rtsp;
 	struct raopst_s *ht;
 	raopsr_cb_t	raop_cb;
-	http_cb_t	http_cb;
+	raop_http_cb_t http_cb;
 	struct {
 		char				DACPid[32], id[32];
 		struct in_addr		host;
@@ -79,7 +79,7 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 struct raopsr_s *raopsr_create(struct in_addr host, struct mdnsd *svr, char *name,
 						char *model, unsigned char mac[6], char *codec, bool metadata,
 						bool drift,	bool flush, char *latencies, void *owner,
-						raopsr_cb_t raop_cb, http_cb_t http_cb,
+						raopsr_cb_t raop_cb, raop_http_cb_t http_cb,
 						unsigned short port_base, unsigned short port_range,
 						int http_length ) {
 	struct raopsr_s *ctx = malloc(sizeof(struct raopsr_s));
