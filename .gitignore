@@ -49,7 +49,7 @@ Temporary Items
 # C++ builder related
 *.*proj
 __history
-Win32
+/Win32
 *.i??
 *.map
 *.tds
