@@ -18,6 +18,7 @@ if exist %target% (
 robocopy lib\win32\x86 %target% lib*.lib lib*.pdb /NDL /NJH /NJS /nc /ns /np
 robocopy src targets\include raop_client.h /NDL /NJH /NJS /nc /ns /np
 robocopy src targets\include raop_server.h /NDL /NJH /NJS /nc /ns /np
+robocopy src targets\include raop_streamer.h /NDL /NJH /NJS /nc /ns /np
 
 endlocal
 

@@ -64,6 +64,7 @@ do
 		cp lib/$host/$platform/lib$item.a $target		
 		cp -u src/raop_client.h targets/include
 		cp -u src/raop_server.h targets/include
+		cp -u src/raop_streamer.h targets/include
 	else	
 		rm -f $target/lib$item.a
 	fi	

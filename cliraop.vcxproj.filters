@@ -24,7 +24,7 @@
   <ItemGroup>
     <Library Include="libcodecs\targets\win32\x86\libcodecs.lib" />
     <Library Include="pthreads4w\targets\win32\x86\libpthreadVC3.lib" />
-    <Library Include="lib\win32\x86\libraoptools.lib" />
+    <Library Include="lib\win32\x86\libraop.lib" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="crosstools">
