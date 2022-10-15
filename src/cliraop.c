@@ -140,7 +140,7 @@ static void init_platform(bool interactive) {
 #if !WIN
 	if (interactive) set_termio(false);
 #endif
-	cross_load_ssl();
+	cross_ssl_load();
 }
 
 /*----------------------------------------------------------------------------*/
@@ -149,7 +149,7 @@ static void close_platform(bool interactive) {
 #if !WIN
 	if (interactive) set_termio(true);
 #endif
-	cross_free_ssl();
+	cross_ssl_free();
 }
 
 /*----------------------------------------------------------------------------*/

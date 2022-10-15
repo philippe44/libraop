@@ -102,7 +102,7 @@ bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr hos
 
 	p->session = NULL;
 	if ((p->fd = open_tcp_socket(local, NULL, true)) == -1) return false;
-	if (!get_tcp_connect_by_host(p->fd, host, destport)) return false;
+	if (!tcp_connect_by_host(p->fd, host, destport)) return false;
 
 	getsockname(p->fd, (struct sockaddr*)&name, &namelen);
 	memcpy(&p->local_addr,&name.sin_addr, sizeof(struct in_addr));
