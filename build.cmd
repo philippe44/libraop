@@ -6,8 +6,8 @@ if /I [%1] == [rebuild] (
 	set option="-t:Rebuild"
 )
 
-rem msbuild libraoptools.sln /property:Configuration=Debug %option%
-msbuild raoptools.sln /property:Configuration=Release %option%
+rem msbuild libraop.sln /property:Configuration=Debug %option%
+msbuild libraop.sln /property:Configuration=Release %option%
 
 set target=targets\win32\x86
 
