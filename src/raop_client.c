@@ -211,6 +211,7 @@ uint32_t raopcl_sample_rate(struct raopcl_s *p)
 /*----------------------------------------------------------------------------*/
 uint64_t raopcl_get_ntp(struct ntp_s* ntp)
 {
+#if 0
 	struct timeval tv;
 	struct ntp_s local;
 
@@ -238,6 +239,17 @@ uint64_t raopcl_get_ntp(struct ntp_s* ntp)
 	if (ntp) *ntp = local;
 
 	return (((uint64_t)local.seconds) << 32) + local.fraction;
+#endif
+	uint64_t time = gettime_us();
+	uint32_t seconds = time / (1000 * 1000);
+	uint32_t fraction = ((time % (1000 * 1000)) << 32) / (1000 * 1000);
+
+	if (ntp) {
+		ntp->seconds = seconds;
+		ntp->fraction = fraction;
+	}
+
+	return ((uint64_t)seconds << 32) | fraction;
 }
 
 /*----------------------------------------------------------------------------*/
