@@ -1,6 +1,3 @@
-[submodule "pthreads4w"]
-	path = pthreads4w
-	url = https://github.com/philippe44/pthreads4w
 [submodule "curve25519"]
 	path = curve25519
 	url = https://github.com/philippe44/curve25519
@@ -19,3 +16,6 @@
 [submodule "crosstools"]
 	path = crosstools
 	url = https://github.com/philippe44/crosstools
+[submodule "libpthreads4w"]
+	path = libpthreads4w
+	url = https://github.com/philippe44/libpthreads4w
