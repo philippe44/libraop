@@ -211,35 +211,6 @@ uint32_t raopcl_sample_rate(struct raopcl_s *p)
 /*----------------------------------------------------------------------------*/
 uint64_t raopcl_get_ntp(struct ntp_s* ntp)
 {
-#if 0
-	struct timeval tv;
-	struct ntp_s local;
-
-#if WIN
-	FILETIME ft;
-	unsigned __int64 tmpres = 0;
-
-	GetSystemTimeAsFileTime(&ft);
-
-	tmpres |= ft.dwHighDateTime;
-	tmpres <<= 32;
-	tmpres |= ft.dwLowDateTime;
-
-	/*converting file time to unix epoch*/
-	tmpres /= 10;
-	tmpres -= 11644473600000000Ui64;
-	tv.tv_sec = (long)(tmpres / 1000000UL);
-	tv.tv_usec = (long)(tmpres % 1000000UL);
-#else
-	gettimeofday(&tv, NULL);
-#endif
-
-	local.seconds = tv.tv_sec + 0x83AA7E80;
-	local.fraction = (((uint64_t)tv.tv_usec) << 32) / 1000000;
-	if (ntp) *ntp = local;
-
-	return (((uint64_t)local.seconds) << 32) + local.fraction;
-#endif
 	uint64_t time = gettime_us();
 	uint32_t seconds = time / (1000 * 1000);
 	uint32_t fraction = ((time % (1000 * 1000)) << 32) / (1000 * 1000);
@@ -249,7 +220,7 @@ uint64_t raopcl_get_ntp(struct ntp_s* ntp)
 		ntp->fraction = fraction;
 	}
 
-	return ((uint64_t)seconds << 32) | fraction;
+	return ((uint64_t) seconds << 32) | fraction;
 }
 
 /*----------------------------------------------------------------------------*/
