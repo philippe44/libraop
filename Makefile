@@ -50,7 +50,7 @@ LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a
 
 ifneq ($(STATIC),)
 LIBRARY	+= $(OPENSSL)/libopenssl.a
-DEFINES += -DSSL_LIB_STATIC
+DEFINES += -DSSL_STATIC_LIB
 endif
 
 all: lib $(BIN)
