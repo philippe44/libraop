@@ -984,10 +984,10 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 
 	// RTSP pairing verify for AppleTV
 	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
-
+LOG_ERROR("VER");
 	// Send pubkey for MFi devices
 	if (strchr(p->et, '4')) rtspcl_auth_setup(p->rtspcl);
-
+LOG_ERROR("VER-2");
 	// build sdp parameter
 	buf = strdup(inet_ntoa(peer));
 	sprintf(sdp,
@@ -998,7 +998,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 			"t=0 0\r\n",
 			sid, rtspcl_local_ip(p->rtspcl), buf);
 	free(buf);
-
+LOG_ERROR("AUTH");
 	if (!raopcl_set_sdp(p, sdp)) goto erexit;
 
 	// AppleTV expects now the timing port ot be opened BEFORE the setup message

@@ -6,19 +6,13 @@ PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
 SRC 		= src
-BIN		= bin/cliraop-$(PLATFORM)
+BIN		= bin/cliraop-$(HOST)-$(PLATFORM)
 LIB		= lib/$(HOST)/$(PLATFORM)/libraop.a
-BUILDDIR	= build/$(PLATFORM)
+BUILDDIR	= build/$(HOST)/$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
 CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
-LDFLAGS += -s -lpthread -ldl -lm -lrt -lstdc++ -L. 
-
-ifeq ($(OS),Darwin)
-LDFLAGS 	+= -Wl,-dead_strip
-else
-LDFLAGS 	+= -Wl,--gc-sections
-endif
+LDFLAGS += -s -lpthread -ldl -lm -lstdc++ -L. 
 
 TOOLS		= crosstools/src
 #VALGRIND	= ../valgrind
@@ -33,7 +27,7 @@ vpath %.cpp $(TOOLS):$(SRC)
 INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
 	  -I$(TOOLS) \
 	  -I$(DMAP_PARSER) \
-	  -I$(MDNS)/include/tinysvcmdns -I$(MDNS)/include/mdnssd \
+	  -I$(MDNS)/include/mdnssvc -I$(MDNS)/include/mdnssd \
 	  -I$(OPENSSL)/include \
 	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac -I$(CODECS)/include/shine \
 	  -I$(SRC) -I$(SRC)/inc
@@ -56,7 +50,7 @@ LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a
 
 ifneq ($(STATIC),)
 LIBRARY	+= $(OPENSSL)/libopenssl.a
-DEFINES += -DLINKALL
+DEFINES += -DSSL_LIB_STATIC
 endif
 
 all: lib $(BIN)

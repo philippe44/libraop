@@ -1148,7 +1148,7 @@ static void *http_thread_func(void *arg) {
 						char *format;
 
 						// there is room for 1 extra byte at the beginning for length
-						if (ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s';";
+						if (*ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s';";
 						else format = "NStreamTitle='%s%s%s';";
 						len_16 = sprintf(buffer, format, ctx->metadata.artist,
 										 *ctx->metadata.artist ? " - " : "",

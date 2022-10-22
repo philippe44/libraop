@@ -10,7 +10,7 @@
 #pragma once
 
 #include "cross_util.h"
-#include "tinysvcmdns.h"
+#include "mdnssvc.h"
 
 typedef struct raopsv_metadata_s {
 	char artist[256];

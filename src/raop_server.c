@@ -11,7 +11,7 @@
 #include <openssl/pem.h>
 
 #include "platform.h"
-#include "tinysvcmdns.h"
+#include "mdnssvc.h"
 #include "mdnssd.h"
 #include "cross_util.h"
 #include "base64.h"

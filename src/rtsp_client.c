@@ -173,8 +173,6 @@ bool rtspcl_mark_del_exthds(struct rtspcl_s *p, char *key) {
 
 	if (!p) return false;
 
-	if (!p->exthds) return false;
-
 	while (p->exthds[i].key) {
 		if (!strcmp(key, p->exthds[i].key)){
 			p->exthds[i].key[0]=0xff;
@@ -192,7 +190,7 @@ bool rtspcl_remove_all_exthds(struct rtspcl_s *p) {
 
 	if (!p) return false;
 
-	while (p->exthds && p->exthds[i].key) {
+	while (p->exthds[i].key) {
 		free(p->exthds[i].key);
 		free(p->exthds[i].data);
 		i++;
@@ -491,18 +489,20 @@ bool rtspcl_auth_setup(struct rtspcl_s *p) {
 	int rsp_len;
 
 	if (!p) return false;
-
+	printf("TRYING TO\n");
 	// create a verification public key
 	RAND_bytes(secret, SECRET_KEY_SIZE);
 	VALGRIND_MAKE_MEM_DEFINED(secret, SECRET_KEY_SIZE);
 #ifdef USE_CURVE25519
 	curve25519_dh_CalculatePublicKey(pub_key, secret);
 #else
+	printf("FUCKED-01\n");
 	EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, secret, 32);
+	printf("FUCKED-02\n");
 	size_t size = PUBLIC_KEY_SIZE;
 	EVP_PKEY_get_raw_public_key(key, pub_key, &size);
 #endif
-
+printf("FUCKED-1\n");
 	// POST the auth_pub and verify_pub concataned
 	buf = malloc(1 + PUBLIC_KEY_SIZE);
 	memcpy(buf, "\x01", 1);
@@ -591,7 +591,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	sprintf(buf, "User-Agent: %s\r\n", rtspcld->useragent );
 	strcat(req, buf);
 
-	for (i = 0; rtspcld->exthds && rtspcld->exthds[i].key; i++) {
+	for (i = 0; rtspcld->exthds[i].key; i++) {
 		if ((unsigned char) rtspcld->exthds[i].key[0] == 0xff) continue;
 		sprintf(buf,"%s: %s\r\n", rtspcld->exthds[i].key, rtspcld->exthds[i].data);
 		strcat(req, buf);

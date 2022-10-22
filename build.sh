@@ -1,7 +1,7 @@
 #!/bin/bash
 
-list="x86_64-linux-gnu-gcc x86-linux-gnu-gcc arm-linux-gnueabi-gcc aarch64-linux-gnu-gcc sparc64-linux-gnu-gcc mips-linux-gnu-gcc powerpc-linux-gnu-gcc"
-declare -A alias=( [x86-linux-gnu-gcc]=i686-linux-gnu-gcc )
+list="x86_64-linux-gnu-gcc x86-linux-gnu-gcc arm-linux-gnueabi-gcc aarch64-linux-gnu-gcc sparc64-linux-gnu-gcc mips-linux-gnu-gcc powerpc-linux-gnu-gcc x86_64-macos-darwin-gcc"
+declare -A alias=( [x86-linux-gnu-gcc]=i686-linux-gnu-gcc [x86_64-macos-darwin-gcc]=x86_64-apple-darwin19-gcc )
 declare -A cflags=( [sparc64-linux-gnu-gcc]="-mcpu=v7" [mips-linux-gnu-gcc]="-march=mips32" [powerpc-linux-gnu-gcc]="-m32")
 declare -a compilers
 
@@ -52,13 +52,14 @@ do
 	IFS=- read -r platform host dummy <<< $cc
 	
 	export CFLAGS=${cflags[$cc]}
+	CC=${alias[$cc]:-$cc}
 	
 	target=targets/$host/$platform	
 	mkdir -p targets/include	
 	mkdir -p $target
 	pwd=$(pwd)
 	
-	make CC=${alias[$cc]:-$cc} PLATFORM=$platform $action
+	make AR=${CC%-*}-ar CC=$CC STATIC=1 PLATFORM=$platform HOST=$host $action
 
 	if [[ -z $clean ]]; then
 		cp lib/$host/$platform/lib$item.a $target		
