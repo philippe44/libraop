@@ -263,14 +263,14 @@ int main(int argc, char *argv[]) {
 		close_platform(interactive);
 		exit(1);
 	}
-	printf("CREATED\n");
+
 	// get player's address
 	player.hostent = gethostbyname(player.name);
 	if (!player.hostent) {
 		LOG_ERROR("Cannot resolve name %s", player.name);
 		goto exit;
 	}
-	printf("CREATED-2\n");
+
 	memcpy(&player.addr.s_addr, player.hostent->h_addr_list[0], player.hostent->h_length);
 
 	// connect to player
@@ -278,7 +278,7 @@ int main(int argc, char *argv[]) {
 		LOG_ERROR("Cannot connect to AirPlay device %s:%hu, check firewall & port", inet_ntoa(player.addr), port);
 		goto exit;
 	}
-	printf("CREATED-3\n");
+
 	latency = raopcl_latency(raopcl);
 
 	LOG_INFO("connected to %s on port %d, player latency is %d ms", inet_ntoa(player.addr),

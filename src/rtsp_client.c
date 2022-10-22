@@ -489,20 +489,17 @@ bool rtspcl_auth_setup(struct rtspcl_s *p) {
 	int rsp_len;
 
 	if (!p) return false;
-	printf("TRYING TO\n");
+
 	// create a verification public key
 	RAND_bytes(secret, SECRET_KEY_SIZE);
 	VALGRIND_MAKE_MEM_DEFINED(secret, SECRET_KEY_SIZE);
 #ifdef USE_CURVE25519
 	curve25519_dh_CalculatePublicKey(pub_key, secret);
 #else
-	printf("FUCKED-01\n");
 	EVP_PKEY* key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, secret, 32);
-	printf("FUCKED-02\n");
 	size_t size = PUBLIC_KEY_SIZE;
 	EVP_PKEY_get_raw_public_key(key, pub_key, &size);
 #endif
-printf("FUCKED-1\n");
 	// POST the auth_pub and verify_pub concataned
 	buf = malloc(1 + PUBLIC_KEY_SIZE);
 	memcpy(buf, "\x01", 1);
