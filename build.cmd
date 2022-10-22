@@ -7,7 +7,7 @@ if /I [%1] == [rebuild] (
 )
 
 rem msbuild libraop.sln /property:Configuration=Debug %option%
-msbuild libraop.sln /property:Configuration=Release %option%
+msbuild libraop.sln /property:Configuration=Static %option%
 
 set target=targets\win32\x86
 
