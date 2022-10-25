@@ -46,10 +46,10 @@
 
 #define PUBKEY_SIZE	64
 
-#define SEC(ntp) ((uint32_t) ((ntp) >> 32))
-#define FRAC(ntp) ((uint32_t) (ntp))
-#define SECNTP(ntp) SEC(ntp),FRAC(ntp)
-#define MSEC(ntp)  ((uint32_t) ((((ntp) >> 16)*1000) >> 16))
+#define RAOP_SEC(ntp) ((uint32_t) ((ntp) >> 32))
+#define RAOP_FRAC(ntp) ((uint32_t) (ntp))
+#define RAOP_SECNTP(ntp) RAOP_SEC(ntp),RAOP_FRAC(ntp)
+#define RAOP_MSEC(ntp)  ((uint32_t) ((((ntp) >> 16)*1000) >> 16))
 
 /*
  --- timestamps (ts), millisecond (ms) and network time protocol (ntp) ---
@@ -369,7 +369,7 @@ bool raopcl_start_at(struct raopcl_s *p, uint64_t start_time)
 
 	pthread_mutex_unlock(&p->mutex);
 
-	LOG_INFO("[%p]: set start time %u.%u (ts:%" PRIu64 ")", p, SEC(start_time), FRAC(start_time), p->start_ts);
+	LOG_INFO("[%p]: set start time %u.%u (ts:%" PRIu64 ")", p, RAOP_SEC(start_time), RAOP_FRAC(start_time), p->start_ts);
 
 	return true;
 }
@@ -412,7 +412,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 		// move to streaming only when really flushed - not when timedout
 		if (p->state == RAOP_FLUSHED) {
 			p->first_pkt = first_pkt = true;
-			LOG_INFO("[%p]: begining to stream hts:%" PRIu64 " n:%u.%u", p, p->head_ts, SECNTP(now));
+			LOG_INFO("[%p]: begining to stream hts:%" PRIu64 " n:%u.%u", p, p->head_ts, RAOP_SECNTP(now));
 			p->state = RAOP_STREAMING;
 		}
 
@@ -420,7 +420,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 		if (!p->pause_ts) {
 			p->head_ts = p->first_ts = p->start_ts ? p->start_ts : now_ts;
 			if (first_pkt) _raopcl_send_sync(p, true);
-			LOG_INFO("[%p]: restarting w/o pause n:%u.%u, hts:%" PRIu64 "", p, SECNTP(now), p->head_ts);
+			LOG_INFO("[%p]: restarting w/o pause n:%u.%u, hts:%" PRIu64 "", p, RAOP_SECNTP(now), p->head_ts);
 		}
 		else {
 			uint16_t n, i, chunks = raopcl_latency(p) / p->chunk_len;
@@ -433,7 +433,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 
 			if (first_pkt) _raopcl_send_sync(p, true);
 
-			LOG_INFO("[%p]: restarting w/ pause n:%u.%u, hts:%" PRIu64 " (re-send: %d)", p, SECNTP(now), p->head_ts, chunks);
+			LOG_INFO("[%p]: restarting w/ pause n:%u.%u, hts:%" PRIu64 " (re-send: %d)", p, RAOP_SECNTP(now), p->head_ts, chunks);
 
 			// search pause_ts in backlog, it should be backward, not too far
 			for (n = p->seq_number, i = 0;
@@ -515,7 +515,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 	*/
 	if (p->state == RAOP_FLUSHED) {
 		p->first_pkt = true;
-		LOG_INFO("[%p]: begining to stream (LATE) hts:%" PRIu64 " n:%u.%u", p, p->head_ts, SECNTP(now));
+		LOG_INFO("[%p]: begining to stream (LATE) hts:%" PRIu64 " n:%u.%u", p, p->head_ts, RAOP_SECNTP(now));
 		p->state = RAOP_STREAMING;
 		_raopcl_send_sync(p, true);
 	}
@@ -551,7 +551,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 
 	*playtime = TS2NTP(p->head_ts + raopcl_latency(p), p->sample_rate);
 
-	LOG_SDEBUG("[%p]: sending audio ts:%" PRIu64 " (pt:%u.%u now:%" PRIu64 ") ", p, p->head_ts, SEC(*playtime), FRAC(*playtime), raopcl_get_ntp(NULL));
+	LOG_SDEBUG("[%p]: sending audio ts:%" PRIu64 " (pt:%u.%u now:%" PRIu64 ") ", p, p->head_ts, RAOP_SEC(*playtime), RAOP_FRAC(*playtime), raopcl_get_ntp(NULL));
 
 	p->seq_number++;
 
@@ -586,7 +586,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 	if (NTP2MS(*playtime) % 10000 < 8) {
 		LOG_INFO("[%p]: check n:%u p:%u ts:%" PRIu64 " sn:%u\n               "
 				  "retr: %u, avail: %u, send: %u, select: %u)", p,
-				 MSEC(now), MSEC(*playtime), p->head_ts, p->seq_number,
+				 RAOP_MSEC(now), RAOP_MSEC(*playtime), p->head_ts, p->seq_number,
 				 p->retransmit, p->sane.audio.avail, p->sane.audio.send,
 				 p->sane.audio.select);
 	}
@@ -1235,7 +1235,7 @@ void _raopcl_send_sync(struct raopcl_s *raopcld, bool first)
 
 	if (!first) pthread_mutex_unlock(&raopcld->mutex);
 
-	LOG_DEBUG("[%p]: sync ntp:%u.%u (ts:%" PRIu64 ")", raopcld, SEC(now), FRAC(now), raopcld->head_ts);
+	LOG_DEBUG("[%p]: sync ntp:%u.%u (ts:%" PRIu64 ")", raopcld, RAOP_SEC(now), RAOP_FRAC(now), raopcld->head_ts);
 
 	if (n < 0) LOG_ERROR("[%p]: write error: %s", raopcld, strerror(errno));
 	if (n == 0) LOG_INFO("[%p]: write, disconnected on the other end", raopcld);
@@ -1290,7 +1290,14 @@ void *_rtp_timing_thread(void *args)
 			VALGRIND_MAKE_MEM_DEFINED(&rsp, sizeof(rsp));
 
 			// transform timeval into NTP and set network order
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
 			raopcl_get_ntp(&rsp.recv_time);
+#pragma GCC diagnostic pop
+#else
+			raopcl_get_ntp(&rsp.recv_time);
+#endif
 
 			rsp.recv_time.seconds = htonl(rsp.recv_time.seconds);
 			rsp.recv_time.fraction = htonl(rsp.recv_time.fraction);

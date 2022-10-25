@@ -34,9 +34,9 @@
 #include "cross_util.h"
 #include "cross_log.h"
 
-#define SEC(ntp) ((uint32_t) ((ntp) >> 32))
-#define FRAC(ntp) ((uint32_t) (ntp))
-#define SECNTP(ntp) SEC(ntp),FRAC(ntp)
+#define RAOP_SEC(ntp) ((uint32_t) ((ntp) >> 32))
+#define RAOP_FRAC(ntp) ((uint32_t) (ntp))
+#define RAOP_SECNTP(ntp) RAOP_SEC(ntp),RAOP_FRAC(ntp)
 
 // debug level from tools & other elements
 log_level	util_loglevel;
@@ -164,7 +164,7 @@ int main(int argc, char *argv[]) {
 		struct hostent *hostent;
 		char *name;
 		struct in_addr addr;
-	} player = { NULL, NULL, { INADDR_ANY } };
+	} player = { 0 };
 	int infile;
 	uint8_t *buf;
 	int i, n = -1, level = 2;
@@ -290,7 +290,7 @@ int main(int argc, char *argv[]) {
 		start_at = (start ? start : now) + MS2NTP(wait) -
 					TS2NTP(latency, raopcl_sample_rate(raopcl));
 
-		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", SECNTP(now), SECNTP(start_at),
+		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", RAOP_SECNTP(now), RAOP_SECNTP(start_at),
 				 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ?
 				  (uint32_t) NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) :
 				  0);
@@ -312,7 +312,7 @@ int main(int argc, char *argv[]) {
 			last = now;
 			if (frames && frames > raopcl_latency(raopcl)) {
 				LOG_INFO("at %u.%u (%" PRIu64 " ms after start), played %" PRIu64 " ms",
-						  SECNTP(now), NTP2MS(now - start),
+						  RAOP_SECNTP(now), NTP2MS(now - start),
 						  TS2MS(frames - raopcl_latency(raopcl), raopcl_sample_rate(raopcl)));
 			}
 		}
@@ -333,14 +333,14 @@ int main(int argc, char *argv[]) {
 					raopcl_pause(raopcl);
 					raopcl_flush(raopcl);
 					status = PAUSED;
-					LOG_INFO("Pause at : %u.%u", SECNTP(raopcl_get_ntp(NULL)));
+					LOG_INFO("Pause at : %u.%u", RAOP_SECNTP(raopcl_get_ntp(NULL)));
 				}
 				break;
 			case 's':
 				raopcl_stop(raopcl);
 				raopcl_flush(raopcl);
 				status = STOPPED;
-				LOG_INFO("Stopped at : %u.%u", SECNTP(raopcl_get_ntp(NULL)));
+				LOG_INFO("Stopped at : %u.%u", RAOP_SECNTP(raopcl_get_ntp(NULL)));
 				break;
 			case 'r': {
 				uint64_t now = raopcl_get_ntp(NULL);
@@ -348,7 +348,7 @@ int main(int argc, char *argv[]) {
 
 				status = PLAYING;
 				raopcl_start_at(raopcl, start_at);
-				LOG_INFO("Re-started at : %u.%u", SECNTP(start_at));
+				LOG_INFO("Re-started at : %u.%u", RAOP_SECNTP(start_at));
 				}
 				break;
 			case 'q':
