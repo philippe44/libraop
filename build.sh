@@ -19,7 +19,7 @@ do
 	if ! command -v ${alias[$cc]:-$cc} &> /dev/null; then
 		continue
 	fi
-	
+
 	if [[ $# == 0 || ($# == 1 && -n $clean) ]]; then
 		compilers+=($cc)
 		continue

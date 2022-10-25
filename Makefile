@@ -8,7 +8,7 @@ HOST ?= $(word 2, $(subst -, ,$(CC)))
 SRC 		= src
 BIN		= bin/cliraop-$(HOST)-$(PLATFORM)
 LIB		= lib/$(HOST)/$(PLATFORM)/libraop.a
-BUILDDIR	= build/$(HOST)/$(PLATFORM)
+BUILDDIR	= bin/$(HOST)/$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
 CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections 
