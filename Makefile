@@ -61,7 +61,7 @@ directory:
 	@mkdir -p $(BUILDDIR)
 
 $(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB) 
-	$(CC) $^ $(LIBRARY) $(LDFLAGS) -o $@
+	$(CC) $^ $(LIBRARY) $(CFLAGS) $(LDFLAGS) -o $@
 	
 $(LIB): $(OBJECTS)
 	$(AR) rcs $@ $^

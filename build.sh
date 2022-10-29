@@ -19,8 +19,6 @@ declare -A cflags=( [sparc64-linux-gnu-gcc]="-mcpu=v7" \
                     [mipsel-linux-gnu-gcc]="-march=mips32" \
 					[powerpc-linux-gnu-gcc]="-m32" )
 					
-declare -A ldflags=( [powerpc-linux-gnu-gcc]="-m32" ) 					
-					
 declare -a compilers
 
 IFS= read -ra candidates <<< "$list"
@@ -73,7 +71,6 @@ do
 	IFS=- read -r platform host dummy <<< $cc
 	
 	export CFLAGS="${cflags[$cc]}"
-	export LDFLAGS="${ldflags[$cc]}"
 	CC=${alias[$cc]:-$cc}
 	
 	target=targets/$host/$platform	
