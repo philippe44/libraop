@@ -11,7 +11,7 @@ LIB		= lib/$(HOST)/$(PLATFORM)/libraop.a
 BUILDDIR	= bin/$(HOST)/$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
-CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections -Wl,--gc-sections
+CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
 LDFLAGS += -s -lpthread -ldl -lm -lstdc++ -L.
 
 TOOLS		= crosstools/src
