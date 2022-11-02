@@ -2,17 +2,25 @@ ifeq ($(CC),cc)
 CC=$(lastword $(subst /, ,$(shell readlink -f `which cc`)))
 endif
 
+ifeq ($(findstring gcc,$(CC)),gcc)
+CFLAGS  += -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar 
+LDFLAGS += -s -lstdc++
+else
+CFLAGS += -fno-temp-file
+LDFLAGS += -lc++
+endif
+
 PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
-SRC 		= src
-BIN		= bin/cliraop-$(HOST)-$(PLATFORM)
-LIB		= lib/$(HOST)/$(PLATFORM)/libraop.a
-BUILDDIR	= bin/$(HOST)/$(PLATFORM)
+SRC      = src
+BIN	     = bin/cliraop-$(HOST)-$(PLATFORM)
+LIB	     = lib/$(HOST)/$(PLATFORM)/libraop.a
+BUILDDIR = bin/$(HOST)/$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
-CFLAGS  += -Wall -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
-LDFLAGS += -s -lpthread -ldl -lm -lstdc++ -L.
+CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
+LDFLAGS += -lpthread -ldl -lm -L.
 
 TOOLS		= crosstools/src
 #VALGRIND	= ../valgrind
@@ -56,7 +64,6 @@ endif
 all: lib $(BIN)
 lib: directory $(LIB)
 directory:
-	@mkdir -p bin
 	@mkdir -p lib/$(HOST)/$(PLATFORM)	
 	@mkdir -p $(BUILDDIR)
 
@@ -70,7 +77,7 @@ $(BUILDDIR)/%.o : %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
 	
 $(BUILDDIR)/%.o : %.cpp
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
+	$(CXX) $(CXXFLAGS) $(CFLAGS) $(CPPFLAGS) $(INCLUDE) $< -c -o $@
 
 cleanlib:
 	rm -f $(BUILDDIR)/*.o $(LIB) 
