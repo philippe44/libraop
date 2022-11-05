@@ -47,7 +47,6 @@ Temporary Items
 .apdisk
 
 # C++ builder related
-*.*proj
 __history
 /Win32
 *.i??
