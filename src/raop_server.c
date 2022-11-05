@@ -616,7 +616,7 @@ bool search_remote_cb(mdnssd_service_t *slist, void *cookie, bool *stop) {
 static void* search_remote(void *args) {
 	raopsr_t *ctx = (raopsr_t*) args;
 
-	mdnssd_query(ctx->active_remote.handle, "_dacp._tcp.local", 0, 0, &search_remote_cb, (void*) ctx);
+	mdnssd_query(ctx->active_remote.handle, "_dacp._tcp.local", false, 0, &search_remote_cb, (void*) ctx);
 	return NULL;
 }
 
