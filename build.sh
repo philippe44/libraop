@@ -84,7 +84,7 @@ do
 	mkdir -p $target
 	pwd=$(pwd)
 	
-	make AR=${CC%-*}-ar CC=$CC STATIC=1 PLATFORM=$platform HOST=$host $action
+	make AR=${CC%-*}-ar CC=$CC STATIC=1 PLATFORM=$platform HOST=$host $action -j8
 
 	if [[ -z $clean ]]; then
 		cp lib/$host/$platform/lib$item.a $target		
