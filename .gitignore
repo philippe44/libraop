@@ -69,3 +69,4 @@ __history
 *.user
 lib/
 bin/*.pdb
+*.bat

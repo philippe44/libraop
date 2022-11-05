@@ -48,7 +48,7 @@ typedef struct raopsr_s {
 		char				DACPid[32], id[32];
 		struct in_addr		host;
 		uint16_t				port;
-		struct mDNShandle_s *handle;
+		struct mdnssd_handle_s *handle;
 	} active_remote;
 	void *owner;
 	struct {
@@ -217,7 +217,7 @@ void raopsr_delete(struct raopsr_s *ctx) {
 
 	// terminate search, but do not reclaim memory of pthread if never launched
 	if (ctx->active_remote.handle) {
-		close_mDNS(ctx->active_remote.handle);
+		mdnssd_close(ctx->active_remote.handle);
 		pthread_join(ctx->search_thread, NULL);
 	}
 
@@ -433,7 +433,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		if ((buf = kd_lookup(headers, "DACP-ID")) != NULL) strcpy(ctx->active_remote.DACPid, buf);
 		if ((buf = kd_lookup(headers, "Active-Remote")) != NULL) strcpy(ctx->active_remote.id, buf);
 
-		ctx->active_remote.handle = init_mDNS(false, ctx->host);
+		ctx->active_remote.handle = mdnssd_init(false, ctx->host, true);
 		pthread_create(&ctx->search_thread, NULL, &search_remote, ctx);
 
 	} else if (!strcmp(method, "SETUP") && ((buf = kd_lookup(headers, "Transport")) != NULL)) {
@@ -510,7 +510,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		ctx->hport = -1;
 
 		// need to make sure no search is on-going and reclaim pthread memory
-		if (ctx->active_remote.handle) close_mDNS(ctx->active_remote.handle);
+		if (ctx->active_remote.handle) mdnssd_close(ctx->active_remote.handle);
 		pthread_join(ctx->search_thread, NULL);
 		memset(&ctx->active_remote, 0, sizeof(ctx->active_remote));
 
@@ -592,8 +592,8 @@ static void http_cb(void *owner, struct key_data_s *headers, struct key_data_s *
 }
 
 /*----------------------------------------------------------------------------*/
-bool search_remote_cb(mDNSservice_t *slist, void *cookie, bool *stop) {
-	mDNSservice_t *s;
+bool search_remote_cb(mdnssd_service_t *slist, void *cookie, bool *stop) {
+	mdnssd_service_t *s;
 	raopsr_t *ctx = (raopsr_t*) cookie;
 
 	// see if we have found an active remote for our ID
@@ -616,7 +616,7 @@ bool search_remote_cb(mDNSservice_t *slist, void *cookie, bool *stop) {
 static void* search_remote(void *args) {
 	raopsr_t *ctx = (raopsr_t*) args;
 
-	query_mDNS(ctx->active_remote.handle, "_dacp._tcp.local", 0, 0, &search_remote_cb, (void*) ctx);
+	mdnssd_query(ctx->active_remote.handle, "_dacp._tcp.local", 0, 0, &search_remote_cb, (void*) ctx);
 	return NULL;
 }
 
