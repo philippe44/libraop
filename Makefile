@@ -13,10 +13,11 @@ endif
 PLATFORM ?= $(firstword $(subst -, ,$(CC)))
 HOST ?= $(word 2, $(subst -, ,$(CC)))
 
-SRC      = src
-BIN	     = bin/cliraop-$(HOST)-$(PLATFORM)
-LIB	     = lib/$(HOST)/$(PLATFORM)/libraop.a
-BUILDDIR = bin/$(HOST)/$(PLATFORM)
+SRC        = src
+CORE       = bin/cliraop-$(HOST)
+BUILDDIR   = $(dir $(CORE))$(HOST)/$(PLATFORM)
+LIB	       = lib/$(HOST)/$(PLATFORM)/libraop.a
+EXECUTABLE = $(CORE)-$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
 CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
@@ -61,14 +62,18 @@ LIBRARY	+= $(OPENSSL)/libopenssl.a
 DEFINES += -DSSL_STATIC_LIB
 endif
 
-all: lib $(BIN)
+all: lib $(EXECUTABLE)
 lib: directory $(LIB)
 directory:
 	@mkdir -p lib/$(HOST)/$(PLATFORM)	
 	@mkdir -p $(BUILDDIR)
 
-$(BIN): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB) 
+$(EXECUTABLE): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB) 
 	$(CC) $^ $(LIBRARY) $(CFLAGS) $(LDFLAGS) -o $@
+ifeq ($(HOST),macos)
+	rm -f $(CORE)
+	lipo -create -output $(CORE) $$(ls $(CORE)* | grep -v '\-static')
+endif		
 	
 $(LIB): $(OBJECTS)
 	$(AR) rcs $@ $^
@@ -83,5 +88,5 @@ cleanlib:
 	rm -f $(BUILDDIR)/*.o $(LIB) 
 
 clean: cleanlib
-	rm -f $(BIN)	
+	rm -f $(EXECUTABLE)	$(CORE)
 
