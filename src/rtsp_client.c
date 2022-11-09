@@ -686,7 +686,9 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 			LOG_ERROR("[%p]: content length receive error %p %d", rtspcld, data, size);
 		}
 
-		LOG_INFO("[%p]: Body data %d, %s", rtspcld, clen, data);
+		LOG_INFO("[%p]: Body data len %d", rtspcld, clen, data);
+		if (*loglevel >= lDEBUG) logdump(data, clen);
+
 		if (resp_content) {
 			*resp_content = data;
 			if (resp_len) *resp_len = clen;
