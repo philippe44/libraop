@@ -77,7 +77,7 @@ static int print_usage(char *argv[])
 			   "\t[-n <start>] (start at NTP <start> + <wait>)\n"
 			   "\t[-nf <start>] (start at NTP in <file> + <wait>)\n"
 			   "\t[-e] audio payload encryption\n"
-			   "\t[-u] for authentication (only if cryptoin TXT record)\n"
+			   "\t[-u] for authentication (only if crypto present in TXT record)\n"
    			   "\t[-a] send ALAC compressed audio\n"
 			   "\t[-s <secret>] (valid secret for AppleTV)\n"
 			   "\t[-t <et>] (et field in mDNS - 4 for airport-express and used to detect MFi)\n"
