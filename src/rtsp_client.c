@@ -630,7 +630,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	token = strtok(NULL, delimiters);
 	if (token == NULL || strcmp(token, "200")) {
 		if(get_response == 1) {
-			LOG_ERROR("[%p]: <------ : request failed, error %s", rtspcld, line);
+			LOG_ERROR("[%p]: <------ : request failed, error %s", rtspcld, token);
 			return false;
 		}
 	}

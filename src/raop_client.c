@@ -1064,8 +1064,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	pthread_mutex_unlock(&p->mutex);
 
 	if (set_volume) {
+		LOG_INFO("[%p]: setting volume as part of connect %.2f", p, p->volume);
 		raopcl_set_volume(p, p->volume);
-		LOG_INFO("[%p]: setting volume as part of connect %f", p->volume);
 	}
 
 	if (sac) free(sac);
