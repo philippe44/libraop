@@ -459,7 +459,7 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex) {
 	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, verify_secret, SECRET_KEY_SIZE);
 	EVP_DigestSignInit(md_ctx, NULL, NULL, NULL, priv_key);
 	size = SIGNATURE_SIZE;
-	EVP_DigestSign(md_ctx, signed_keys, &size, buf, 32);
+	EVP_DigestSign(md_ctx, signed_keys, &size, buf, SIGNATURE_SIZE);
 	EVP_MD_CTX_free(md_ctx);
 	EVP_PKEY_free(priv_key);
 #endif
