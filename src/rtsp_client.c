@@ -423,6 +423,7 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex) {
 #ifdef USE_CURVE25519
 	curve25519_dh_CreateSharedKey(shared_secret, atv_pub, verify_secret);
 #else	
+	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, verify_secret, SECRET_KEY_SIZE);
 	EVP_PKEY* peer_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, atv_pub, PUBLIC_KEY_SIZE);
 	EVP_PKEY_CTX* evp_ctx = EVP_PKEY_CTX_new(priv_key, NULL);
 	EVP_PKEY_derive_init(evp_ctx);
