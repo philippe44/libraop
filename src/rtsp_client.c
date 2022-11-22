@@ -456,7 +456,7 @@ bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret_hex) {
 	ed25519_SignMessage(signed_keys, auth_priv, NULL, buf, PUBLIC_KEY_SIZE * 2);
 #else
 	EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
-	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, verify_secret, SECRET_KEY_SIZE);
+	priv_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_ED25519, NULL, auth_priv, SECRET_KEY_SIZE);
 	EVP_DigestSignInit(md_ctx, NULL, NULL, NULL, priv_key);
 	size = SIGNATURE_SIZE;
 	EVP_DigestSign(md_ctx, signed_keys, &size, buf, SIGNATURE_SIZE);
