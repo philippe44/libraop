@@ -1261,7 +1261,6 @@ static bool handle_http(raopst_t *ctx, int sock)
 
 
 	if (ctx->http_length == -3 && HTTP_11) {
-
 		char *value = kd_lookup(headers, "Connection");
 		if (value && (!strcasecmp(value, "close") || !strcasecmp(value,"keep-alive"))) kd_add(resp, "Connection", value);
 		else kd_add(resp, "Connection", "close");
