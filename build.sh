@@ -8,7 +8,7 @@ list="x86_64-linux-gnu-gcc x86-linux-gnu-gcc arm-linux-gnueabi-gcc aarch64-linux
 declare -A alias=( [x86-linux-gnu-gcc]=i686-stretch-linux-gnu-gcc \
                    [x86_64-linux-gnu-gcc]=x86_64-stretch-linux-gnu-gcc \
                    [arm-linux-gnueabi-gcc]=armv7-stretch-linux-gnueabi-gcc \
-				   [armv5-linux-gnueabi-gcc]=armv6-stretch-linux-gnueabi-gcc \
+		   [armv5-linux-gnueabi-gcc]=armv6-stretch-linux-gnueabi-gcc \
                    [armv6-linux-gnueabi-gcc]=armv6-stretch-linux-gnueabi-gcc \
                    [aarch64-linux-gnu-gcc]=aarch64-stretch-linux-gnu-gcc \
                    [sparc64-linux-gnu-gcc]=sparc64-stretch-linux-gnu-gcc \
@@ -21,7 +21,8 @@ declare -A alias=( [x86-linux-gnu-gcc]=i686-stretch-linux-gnu-gcc \
 
 declare -A cflags=( [sparc64-linux-gnu-gcc]="-mcpu=v7" \
                     [mips-linux-gnu-gcc]="-march=mips32" \
-					[armv5-linux-gnueabi-gcc]="-march=armv5t -mfloat-abi=soft" \
+                    [x86_64-linux-gnu-gcc]="-fno-fast-math" \
+                    [armv5-linux-gnueabi-gcc]="-march=armv5t -mfloat-abi=soft" \
                     [powerpc-linux-gnu-gcc]="-m32" )
 					
 declare -a compilers
