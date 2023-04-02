@@ -191,19 +191,9 @@ void raopsr_update(struct raopsr_s *ctx, char *name, char *model) {
 
 /*----------------------------------------------------------------------------*/
 void raopsr_delete(struct raopsr_s *ctx) {
-	struct sockaddr_in addr;
-	socklen_t nlen = sizeof(addr);
-
 	if (!ctx) return;
 
 	ctx->running = false;
-
-	// wake-up thread by connecting socket
-	int sock = socket(AF_INET, SOCK_STREAM, 0);
-	getsockname(ctx->sock, (struct sockaddr*)&addr, &nlen);
-	connect(sock, (struct sockaddr*) & addr, sizeof(addr));
-	closesocket(sock);
-
 	pthread_join(ctx->thread, NULL);
 
 	raopst_end(ctx->ht);
@@ -314,9 +304,15 @@ static void *rtsp_thread(void *arg) {
 		if (sock == -1) {
 			struct sockaddr_in peer;
 			socklen_t addrlen = sizeof(struct sockaddr_in);
+			struct timeval timeout = { 0, 100 * 1000 };
 
-			sock = accept(ctx->sock, (struct sockaddr*) &peer, &addrlen);
-			ctx->peer.s_addr = peer.sin_addr.s_addr;
+			FD_ZERO(&rfds);
+			FD_SET(ctx->sock, &rfds);
+
+			if (select(ctx->sock + 1, &rfds, NULL, NULL, &timeout) > 0) {
+				sock = accept(ctx->sock, (struct sockaddr*)&peer, &addrlen);
+				ctx->peer.s_addr = peer.sin_addr.s_addr;
+			}
 
 			if (sock != -1 && ctx->running) {
 				LOG_INFO("got RTSP connection %u", sock);
