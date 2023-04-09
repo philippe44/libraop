@@ -536,6 +536,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			settings.ctx = &metadata;
 			memset(&metadata, 0, sizeof(metadata));
 			if (!dmap_parse(&settings, body, len)) {
+				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
 				raopst_metadata(ctx->ht, &metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
 						 ctx, metadata.artist, metadata.album, metadata.title);
