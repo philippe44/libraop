@@ -478,7 +478,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 
 		if (ctx->ht) raopst_record(ctx->ht, seqno, rtptime);
 
-		ctx->raop_cb(ctx->owner, RAOP_STREAM, &ctx->hport);
+		ctx->raop_cb(ctx->owner, RAOP_STREAM, ctx->hport);
 
 	}  else if (!strcmp(method, "FLUSH")) {
 		unsigned short seqno = 0;
@@ -492,13 +492,13 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 
 		// only send FLUSH if useful (discards frames above buffer head and top)
 		if (ctx->ht && raopst_flush(ctx->ht, seqno, rtptime, true, !ctx->flush)) {
-			ctx->raop_cb(ctx->owner, RAOP_FLUSH, &ctx->hport);
+			ctx->raop_cb(ctx->owner, RAOP_FLUSH, ctx->hport);
 			raopst_flush_release(ctx->ht);
 		}
 
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
-		ctx->raop_cb(ctx->owner, RAOP_STOP, &ctx->hport);
+		ctx->raop_cb(ctx->owner, RAOP_STOP, ctx->hport);
 
 		raopst_end(ctx->ht);
 
@@ -523,10 +523,8 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			sscanf(p, "%*[^:]:%lf", &volume);
 			LOG_INFO("[%p]: SET PARAMETER volume %lf", ctx, volume);
 			volume = (volume == -144.0) ? 0 : (1 + volume / 30);
-			ctx->raop_cb(ctx->owner, RAOP_VOLUME, &volume);
-		}
-
-		if (((p = kd_lookup(headers, "Content-Type")) != NULL) && !strcasecmp(p, "application/x-dmap-tagged")) {
+			ctx->raop_cb(ctx->owner, RAOP_VOLUME, volume);
+		} else if (((p = kd_lookup(headers, "Content-Type")) != NULL) && !strcasecmp(p, "application/x-dmap-tagged")) {
 			struct raopsv_metadata_s metadata;
 			dmap_settings settings = {
 				NULL, NULL, NULL, NULL,	NULL, NULL,	NULL, on_dmap_string, NULL,
@@ -539,8 +537,11 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
 				raopst_metadata(ctx->ht, &metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
-						 ctx, metadata.artist, metadata.album, metadata.title);
+					ctx, metadata.artist, metadata.album, metadata.title);
 			}
+		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
+				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
+				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, body, len);
 		}
 	} else {
 		success = false;

@@ -19,8 +19,8 @@ typedef struct raopsv_metadata_s {
 	char artwork[256];
 } raopsv_metadata_t;
 
-typedef enum { RAOP_STREAM, RAOP_PLAY, RAOP_FLUSH, RAOP_PAUSE, RAOP_STOP, RAOP_VOLUME, RAOP_METADATA } raopsr_event_t ;
-typedef void (*raopsr_cb_t)(void *owner, raopsr_event_t event, void *param);
+typedef enum { RAOP_STREAM, RAOP_PLAY, RAOP_FLUSH, RAOP_PAUSE, RAOP_STOP, RAOP_VOLUME, RAOP_METADATA, RAOP_ARTWORK } raopsr_event_t ;
+typedef void (*raopsr_cb_t)(void *owner, raopsr_event_t event, ...);
 typedef void (*raop_http_cb_t)(void *owner, struct key_data_s *headers, struct key_data_s *response);
 
 struct raopsr_s* raopsr_create(struct in_addr host, struct mdnsd *svr, char *name,
