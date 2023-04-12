@@ -477,7 +477,6 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		}
 
 		if (ctx->ht) raopst_record(ctx->ht, seqno, rtptime);
-
 		ctx->raop_cb(ctx->owner, RAOP_STREAM, ctx->hport);
 
 	}  else if (!strcmp(method, "FLUSH")) {
@@ -499,7 +498,6 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
 		ctx->raop_cb(ctx->owner, RAOP_STOP, ctx->hport);
-
 		raopst_end(ctx->ht);
 
 		ctx->ht = NULL;
@@ -534,8 +532,8 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			settings.ctx = &metadata;
 			memset(&metadata, 0, sizeof(metadata));
 			if (!dmap_parse(&settings, body, len)) {
-				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
 				raopst_metadata(ctx->ht, &metadata);
+				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
 					ctx, metadata.artist, metadata.album, metadata.title);
 			}
