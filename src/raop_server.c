@@ -683,8 +683,8 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 	struct raopsv_metadata_s *metadata = (struct raopsv_metadata_s *) ctx;
 
 	// make sure we stay null-terminated
-	if (!strcasecmp(code, "asar")) strncpy(metadata->artist, buf, sizeof(metadata->artist) - 1);
-	else if (!strcasecmp(code, "asal")) strncpy(metadata->album, buf, sizeof(metadata->album) - 1);
-	else if (!strcasecmp(code, "minm")) strncpy(metadata->title, buf, sizeof(metadata->title) - 1);
+	if (!strcasecmp(code, "asar")) strncpy(metadata->artist, buf, min(len, sizeof(metadata->artist) - 1));
+	else if (!strcasecmp(code, "asal")) strncpy(metadata->album, buf, min(len, sizeof(metadata->album) - 1));
+	else if (!strcasecmp(code, "minm")) strncpy(metadata->title, buf, min(len, sizeof(metadata->title) - 1));
 }
 
