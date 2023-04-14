@@ -156,7 +156,7 @@ typedef struct raopst_s {
 		size_t interval, remain;
 		bool  updated;
 	} icy;
-	struct raopsv_metadata_s metadata;
+	raopsr_metadata_t metadata;
 	char *silence_frame;
 	alac_file *alac_codec;
 	int flush_seqno;
@@ -410,10 +410,14 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 }
 
 /*---------------------------------------------------------------------------*/
-void raopst_metadata(struct raopst_s *ctx, struct raopsv_metadata_s *metadata) {
+void raopst_metadata(struct raopst_s *ctx, raopsr_metadata_t *metadata) {
 	pthread_mutex_lock(&ctx->ab_mutex);
-	memcpy(&ctx->metadata, metadata, sizeof(*metadata));
-	ctx->icy.updated = true;
+	// free previous metadata if we have not been able to send them yet for any reason
+	raopsr_metadata_free(&ctx->metadata);
+	if (ctx->icy.interval) {
+		raopsr_metadata_copy(&ctx->metadata, metadata);
+		ctx->icy.updated = true;
+	}
 	pthread_mutex_unlock(&ctx->ab_mutex);
 }
 
@@ -447,6 +451,7 @@ void raopst_end(raopst_t *ctx)
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
 	free(ctx->http_tail);
+	raopsr_metadata_free(&ctx->metadata);
 	free(ctx);
 
 #ifdef __RTP_STORE
@@ -1148,14 +1153,15 @@ static void *http_thread_func(void *arg) {
 						char *format;
 
 						// there is room for 1 extra byte at the beginning for length
-						if (*ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s';";
+						if (ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s';";
 						else format = "NStreamTitle='%s%s%s';";
 						len_16 = sprintf(buffer, format, ctx->metadata.artist,
-										 *ctx->metadata.artist ? " - " : "",
+										 ctx->metadata.artist ? " - " : "",
 										 ctx->metadata.title, ctx->metadata.artwork) - 1;
 						LOG_INFO("[%p]: ICY update %s", ctx, buffer + 1);
 						len_16 = (len_16 + 15) / 16;
 						ctx->icy.updated = false;
+						raopsr_metadata_free(&ctx->metadata);
 					}
 
 					buffer[0] = len_16;

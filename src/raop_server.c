@@ -291,6 +291,22 @@ void  raopsr_notify(struct raopsr_s *ctx, raopsr_event_t event, void *param) {
 }
 
 /*----------------------------------------------------------------------------*/
+void raopsr_metadata_free(raopsr_metadata_t* data) {
+	NFREE(data->title);
+	NFREE(data->artist);
+	NFREE(data->album);
+	NFREE(data->artwork);
+}
+
+/*----------------------------------------------------------------------------*/
+void raopsr_metadata_copy(raopsr_metadata_t* dst, raopsr_metadata_t* src) {
+	if (src->title) dst->title = strdup(src->title);
+	if (src->artist) dst->artist = strdup(src->artist);
+	if (src->album) dst->album = strdup(src->album);
+	if (src->artwork) dst->artwork = strdup(src->artwork);
+}
+
+/*----------------------------------------------------------------------------*/
 static void *rtsp_thread(void *arg) {
 	raopsr_t *ctx = (raopsr_t*) arg;
 	int  sock = -1;
@@ -523,7 +539,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			volume = (volume == -144.0) ? 0 : (1 + volume / 30);
 			ctx->raop_cb(ctx->owner, RAOP_VOLUME, volume);
 		} else if (((p = kd_lookup(headers, "Content-Type")) != NULL) && !strcasecmp(p, "application/x-dmap-tagged")) {
-			struct raopsv_metadata_s metadata;
+			raopsr_metadata_t metadata = { 0 };
 			dmap_settings settings = {
 				NULL, NULL, NULL, NULL,	NULL, NULL,	NULL, on_dmap_string, NULL,
 				NULL
@@ -532,10 +548,11 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			settings.ctx = &metadata;
 			memset(&metadata, 0, sizeof(metadata));
 			if (!dmap_parse(&settings, body, len)) {
-				raopst_metadata(ctx->ht, &metadata);
 				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
+				raopst_metadata(ctx->ht, &metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
 					ctx, metadata.artist, metadata.album, metadata.title);
+				raopsr_metadata_free(&metadata);
 			}
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
 				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
@@ -680,11 +697,11 @@ static int  base64_pad(char *src, char **padded) {
 }
 
 static void on_dmap_string(void *ctx, const char *code, const char *name, const char *buf, size_t len) {
-	struct raopsv_metadata_s *metadata = (struct raopsv_metadata_s *) ctx;
+	raopsr_metadata_t *metadata = (raopsr_metadata_t *) ctx;
 
 	// make sure we stay null-terminated
-	if (!strcasecmp(code, "asar")) strncpy(metadata->artist, buf, min(len, sizeof(metadata->artist) - 1));
-	else if (!strcasecmp(code, "asal")) strncpy(metadata->album, buf, min(len, sizeof(metadata->album) - 1));
-	else if (!strcasecmp(code, "minm")) strncpy(metadata->title, buf, min(len, sizeof(metadata->title) - 1));
+	if (!strcasecmp(code, "minm")) metadata->title = strndup(buf, len);
+	else if (!strcasecmp(code, "asar")) metadata->artist = strndup(buf, len);
+	else if (!strcasecmp(code, "asal")) metadata->album = strndup(buf, len);
 }
 

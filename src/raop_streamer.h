@@ -45,4 +45,4 @@ void			 	raopst_end(struct raopst_s *ctx);
 bool 				raopst_flush(struct raopst_s *ctx, unsigned short seqno, unsigned rtptime, bool exit_locked, bool silence);
 void 				raopst_flush_release(struct raopst_s *ctx);
 void 				raopst_record(struct raopst_s *ctx, unsigned short seqno, unsigned rtptime);
-void 				raopst_metadata(struct raopst_s *ctx, struct raopsv_metadata_s *metadata);
+void 				raopst_metadata(struct raopst_s *ctx, raopsr_metadata_t *metadata);
