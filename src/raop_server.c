@@ -589,7 +589,7 @@ static void event_cb(void *owner, raopst_event_t event) {
 
 	switch(event) {
 		case RAOP_STREAMER_PLAY:
-			ctx->raop_cb(ctx->owner, RAOP_PLAY, &ctx->hport);
+			ctx->raop_cb(ctx->owner, RAOP_PLAY, ctx->hport);
 			break;
 		default:
 			LOG_ERROR("[%p]: unknown hairtunes event", ctx, event);
