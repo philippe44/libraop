@@ -44,6 +44,8 @@ typedef struct raopsr_s {
 	struct raopst_s *ht;
 	raopsr_cb_t	raop_cb;
 	raop_http_cb_t http_cb;
+	raopsr_metadata_t metadata;
+	int sequence;
 	struct {
 		char				DACPid[32], id[32];
 		struct in_addr		host;
@@ -196,6 +198,7 @@ void raopsr_delete(struct raopsr_s *ctx) {
 	ctx->running = false;
 	pthread_join(ctx->thread, NULL);
 
+	raopsr_metadata_free(&ctx->metadata);
 	raopst_end(ctx->ht);
 
 #if WIN
@@ -514,6 +517,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
 		ctx->raop_cb(ctx->owner, RAOP_STOP, ctx->hport);
+		raopsr_metadata_free(&ctx->metadata);
 		raopst_end(ctx->ht);
 
 		ctx->ht = NULL;
@@ -539,24 +543,30 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			volume = (volume == -144.0) ? 0 : (1 + volume / 30);
 			ctx->raop_cb(ctx->owner, RAOP_VOLUME, volume);
 		} else if (((p = kd_lookup(headers, "Content-Type")) != NULL) && !strcasecmp(p, "application/x-dmap-tagged")) {
-			raopsr_metadata_t metadata = { 0 };
 			dmap_settings settings = {
 				NULL, NULL, NULL, NULL,	NULL, NULL,	NULL, on_dmap_string, NULL,
 				NULL
 			};
 
-			settings.ctx = &metadata;
-			memset(&metadata, 0, sizeof(metadata));
+			// need to preserve artowk (if any)
+			char* artwork = ctx->metadata.artwork ? strdup(ctx->metadata.artwork) : NULL;
+			raopsr_metadata_free(&ctx->metadata);
+			ctx->metadata.artwork = artwork;
+
+			settings.ctx = &ctx->metadata;
 			if (!dmap_parse(&settings, body, len)) {
-				ctx->raop_cb(ctx->owner, RAOP_METADATA, &metadata);
-				raopst_metadata(ctx->ht, &metadata);
+				ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
+				raopst_metadata(ctx->ht, &ctx->metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
-					ctx, metadata.artist, metadata.album, metadata.title);
-				raopsr_metadata_free(&metadata);
+					ctx, ctx->metadata.artist,ctx->metadata.album, ctx->metadata.title);
 			}
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
 				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
-				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, body, len);
+				char buffer[16];
+				itoa(ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned) &body : (unsigned) &body, buffer, 16);
+				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
+				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, ctx->metadata.artwork, body, len);
+				raopst_metadata(ctx->ht, &ctx->metadata);
 		}
 	} else {
 		success = false;
