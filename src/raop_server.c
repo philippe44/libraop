@@ -563,7 +563,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
 				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
 				char buffer[16];
-				itoa(ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned) &body : (unsigned) &body, buffer, 16);
+				sprintf(buffer, "/%x", ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned)&body : (unsigned)&body);
 				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
 				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, ctx->metadata.artwork, body, len);
 				raopst_metadata(ctx->ht, &ctx->metadata);
