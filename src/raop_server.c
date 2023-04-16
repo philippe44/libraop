@@ -45,6 +45,7 @@ typedef struct raopsr_s {
 	raopsr_cb_t	raop_cb;
 	raop_http_cb_t http_cb;
 	raopsr_metadata_t metadata;
+	bool flushedArtwork;
 	int sequence;
 	struct {
 		char				DACPid[32], id[32];
@@ -466,6 +467,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 
 		ctx->hport = ht.hport;
 		ctx->ht = ht.ctx;
+		ctx->flushedArtwork = true;
 
 		if ((cport * tport * ht.cport * ht.tport * ht.aport * ht.hport) != 0 && ht.ctx) {
 			char *transport;
@@ -514,6 +516,9 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			raopst_flush_release(ctx->ht);
 		}
 
+		// flag that we have received a flush and artwork might be outdated
+		ctx->flushedArtwork = true;
+
 		// need to resend metadata if available as raop does not on seeking
 		if (ctx->metadata.title) {
 			ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
@@ -553,7 +558,10 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				NULL
 			};
 
+			// if artwork has been received after flush, keep it
+			char* artwork = (!ctx->flushedArtwork && ctx->metadata.artwork) ? strdup(ctx->metadata.artwork) : NULL;
 			raopsr_metadata_free(&ctx->metadata);
+			ctx->metadata.artwork = artwork;
 			settings.ctx = &ctx->metadata;
 
 			if (!dmap_parse(&settings, body, len)) {
@@ -566,7 +574,9 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
 				char buffer[16];
 				sprintf(buffer, "/%x", ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned)&body : (unsigned)&body);
+				NFREE(ctx->metadata.artwork);
 				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
+				ctx->flushedArtwork = false;
 				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, &ctx->metadata, body, len);
 				raopst_metadata(ctx->ht, &ctx->metadata);
 		}
