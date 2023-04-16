@@ -548,12 +548,9 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				NULL
 			};
 
-			// need to preserve artowk (if any)
-			//char* artwork = ctx->metadata.artwork ? strdup(ctx->metadata.artwork) : NULL;
 			raopsr_metadata_free(&ctx->metadata);
-			//ctx->metadata.artwork = artwork;
-
 			settings.ctx = &ctx->metadata;
+
 			if (!dmap_parse(&settings, body, len)) {
 				ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
 				raopst_metadata(ctx->ht, &ctx->metadata);

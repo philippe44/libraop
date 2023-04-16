@@ -412,12 +412,10 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 /*---------------------------------------------------------------------------*/
 void raopst_metadata(struct raopst_s *ctx, raopsr_metadata_t *metadata) {
 	pthread_mutex_lock(&ctx->ab_mutex);
-	// free previous metadata if we have not been able to send them yet for any reason
-	raopsr_metadata_free(&ctx->metadata, true);
-	if (ctx->icy.interval) {
-		raopsr_metadata_copy(&ctx->metadata, metadata);
-		ctx->icy.updated = true;
-	}
+	// free previous metadata if we have not been able to send them yet
+	raopsr_metadata_free(&ctx->metadata);
+	raopsr_metadata_copy(&ctx->metadata, metadata);
+	ctx->icy.updated = true;
 	pthread_mutex_unlock(&ctx->ab_mutex);
 }
 
@@ -451,7 +449,7 @@ void raopst_end(raopst_t *ctx)
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
 	free(ctx->http_tail);
-	raopsr_metadata_free(&ctx->metadata, true);
+	raopsr_metadata_free(&ctx->metadata);
 	free(ctx);
 
 #ifdef __RTP_STORE
