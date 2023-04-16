@@ -514,6 +514,11 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			raopst_flush_release(ctx->ht);
 		}
 
+		// need to resend metadata if available as raop does not on seeking
+		if (ctx->metadata.title) {
+			ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
+			raopst_metadata(ctx->ht, &ctx->metadata);
+		}
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
 		ctx->raop_cb(ctx->owner, RAOP_STOP, ctx->hport);
