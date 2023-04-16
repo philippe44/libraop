@@ -562,7 +562,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				char buffer[16];
 				sprintf(buffer, "/%x", ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned)&body : (unsigned)&body);
 				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
-				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, ctx->metadata.artwork, body, len);
+				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, &ctx->metadata, body, len);
 				raopst_metadata(ctx->ht, &ctx->metadata);
 		}
 	} else {
