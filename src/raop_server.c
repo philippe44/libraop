@@ -571,11 +571,12 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 					ctx, ctx->metadata.artist,ctx->metadata.album, ctx->metadata.title);
 			}
 		} else if (body && ((p = kd_lookup(headers, "Content-Type")) != NULL) && strcasestr(p, "image/jpeg")) {
-				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
+				static uint32_t count;
 				char buffer[16];
-				sprintf(buffer, "/%x.jpg", ctx->metadata.title ? hash32(ctx->metadata.title) + (unsigned)&body : (unsigned)&body);
+				sprintf(buffer, "/%x.jpg", ctx->metadata.title ? hash32(ctx->metadata.title) + count : count);
 				NFREE(ctx->metadata.artwork);
 				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
+				LOG_INFO("[%p]: received JPEG image of %d bytes => %s", ctx, len, ctx->metadata.artwork);
 				ctx->flushedArtwork = false;
 				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, &ctx->metadata, body, len);
 				raopst_metadata(ctx->ht, &ctx->metadata);
