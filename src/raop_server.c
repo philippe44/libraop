@@ -498,7 +498,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		}
 
 		if (ctx->ht) raopst_record(ctx->ht, seqno, rtptime);
-		ctx->raop_cb(ctx->owner, RAOP_STREAM, ctx->hport);
+		ctx->raop_cb(ctx->owner, RAOP_STREAM, (uint32_t) ctx->hport);
 
 	}  else if (!strcmp(method, "FLUSH")) {
 		unsigned short seqno = 0;
@@ -512,7 +512,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 
 		// only send FLUSH if useful (discards frames above buffer head and top)
 		if (ctx->ht && raopst_flush(ctx->ht, seqno, rtptime, true, !ctx->flush)) {
-			ctx->raop_cb(ctx->owner, RAOP_FLUSH, ctx->hport);
+			ctx->raop_cb(ctx->owner, RAOP_FLUSH);
 			raopst_flush_release(ctx->ht);
 		}
 
@@ -526,7 +526,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		}
 	}  else if (!strcmp(method, "TEARDOWN")) {
 
-		ctx->raop_cb(ctx->owner, RAOP_STOP, ctx->hport);
+		ctx->raop_cb(ctx->owner, RAOP_STOP);
 		raopsr_metadata_free(&ctx->metadata);
 		raopst_end(ctx->ht);
 
@@ -612,7 +612,7 @@ static void event_cb(void *owner, raopst_event_t event) {
 
 	switch(event) {
 		case RAOP_STREAMER_PLAY:
-			ctx->raop_cb(ctx->owner, RAOP_PLAY, ctx->hport);
+			ctx->raop_cb(ctx->owner, RAOP_PLAY, (uint32_t) ctx->hport);
 			break;
 		default:
 			LOG_ERROR("[%p]: unknown hairtunes event", ctx, event);
