@@ -576,7 +576,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				sprintf(buffer, "/%x.jpg", (ctx->metadata.title ? hash32(ctx->metadata.title) : 0) + count++);
 				NFREE(ctx->metadata.artwork);
 				ctx->metadata.artwork = http_pico_add_source(buffer, "image/jpeg", body, len, 120);
-				LOG_INFO("[%p]: received JPEG image of %d bytes => %s", ctx, len, ctx->metadata.artwork);
+				LOG_INFO("[%p]: received JPEG image of %d bytes", ctx, len);
 				ctx->flushedArtwork = false;
 				ctx->raop_cb(ctx->owner, RAOP_ARTWORK, &ctx->metadata, body, len);
 				raopst_metadata(ctx->ht, &ctx->metadata);
