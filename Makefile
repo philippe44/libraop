@@ -16,7 +16,7 @@ HOST ?= $(word 2, $(subst -, ,$(CC)))
 SRC        = src
 CORE       = bin/cliraop-$(HOST)
 BUILDDIR   = $(dir $(CORE))$(HOST)/$(PLATFORM)
-LIB	       = lib/$(HOST)/$(PLATFORM)/libraop.a
+LIB        = lib/$(HOST)/$(PLATFORM)/libraop.a
 EXECUTABLE = $(CORE)-$(PLATFORM)
 
 DEFINES  = -DNDEBUG -D_GNU_SOURCE
