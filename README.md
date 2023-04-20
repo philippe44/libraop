@@ -48,7 +48,7 @@ make
 
 ## Building using Make
 
-Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, I use Embarcadero C++, so I don't use makefile. You need some libraires:
+Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, there is a VS2022 project. You'll need some libraires:
 
 - ALAC codec: https://github.com/macosforge/alac and
 
