@@ -45,7 +45,7 @@ cd build
 cmake ..
 make
 ```
-
+Note that this is a cross-compiler CMake file so it's better to run it and define HOST and PLATFORM options (see the build.sh) but it's not mandatory.
 ## Building using Make
 
 Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, there is a VS2022 project. You'll need some libraires:
