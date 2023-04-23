@@ -134,12 +134,13 @@ bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
 bool 	raopcl_keepalive(struct raopcl_s *p);
 
-bool 	raopcl_set_progress(struct raopcl_s *p, uint64_t elapsed, uint64_t end);
-bool 	raopcl_set_progress_ms(struct raopcl_s *p, uint32_t elapsed, uint32_t duration);
-bool 	raopcl_set_volume(struct raopcl_s *p, float vol);
-float 	raopcl_float_volume(int vol);
-bool 	raopcl_set_daap(struct raopcl_s *p, int count, ...);
-bool 	raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
+bool 	 raopcl_set_progress(struct raopcl_s *p, uint64_t elapsed, uint64_t end);
+bool 	 raopcl_set_progress_ms(struct raopcl_s *p, uint32_t elapsed, uint32_t duration);
+uint64_t raopcl_get_progress_ms(struct raopcl_s* p);
+bool 	 raopcl_set_volume(struct raopcl_s *p, float vol);
+float 	 raopcl_float_volume(int vol);
+bool 	 raopcl_set_daap(struct raopcl_s *p, int count, ...);
+bool 	 raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *image);
 
 bool 	raopcl_accept_frames(struct raopcl_s *p);
 bool	raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int size, uint64_t *playtime);

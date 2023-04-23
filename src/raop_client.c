@@ -154,6 +154,7 @@ typedef struct raopcl_s {
 	bool encrypt;
 	bool first_pkt;
 	uint64_t head_ts, pause_ts, start_ts, first_ts;
+	uint64_t started_ts;
 	bool flushing;
 	uint16_t   seq_number;
 	unsigned long ssrc;
@@ -778,17 +779,29 @@ bool raopcl_set_progress_ms(struct raopcl_s *p, uint32_t elapsed, uint32_t durat
 bool raopcl_set_progress(struct raopcl_s *p, uint64_t elapsed, uint64_t duration)
 {
 	char a[128];
-	uint64_t start, end, now;
+	uint64_t end, now;
 
 	if (!p || !p->rtspcl || p->state < RAOP_STREAMING || !(p->md_caps & MD_PROGRESS)) return false;
 
 	now = NTP2TS(raopcl_get_ntp(NULL), p->sample_rate);
-	start = now - NTP2TS(elapsed, p->sample_rate);
-	end = duration ? start + NTP2TS(duration, p->sample_rate) : now;
+	p->started_ts = now - NTP2TS(elapsed, p->sample_rate);
+	end = duration ? p->started_ts + NTP2TS(duration, p->sample_rate) : now;
 
-	sprintf(a, "progress: %u/%u/%u\r\n", (uint32_t) start, (uint32_t) now, (uint32_t) end);
+	sprintf(a, "progress: %u/%u/%u\r\n", (uint32_t) p->started_ts, (uint32_t) now, (uint32_t) end);
 
 	return rtspcl_set_parameter(p->rtspcl, a);
+}
+
+/*----------------------------------------------------------------------------*/
+uint64_t raopcl_get_progress_ms(struct raopcl_s* p) 
+{
+	uint64_t elapsed, now;
+
+	if (!p || !(p->md_caps & MD_PROGRESS)) return 0;
+
+	now = NTP2TS(raopcl_get_ntp(NULL), p->sample_rate);
+	elapsed = TS2MS(now - p->started_ts, p->sample_rate);
+	return elapsed;
 }
 
 /*----------------------------------------------------------------------------*/
