@@ -1,6 +1,4 @@
-# RAOP-Player
-
-RAOP player and library (AirPlay)
+## RAOP player and library (AirPlay)
 
 This is a RAOP (airplay) player and library for the v2 protocol (with synchro). It works for Windows, OSX, Linux x86 and ARM.
 There is a small player can can play raw pcm form any file or stdin (useful for use pipes with a decoder like lame, flac or ffmpeg)
@@ -46,6 +44,7 @@ cmake ..
 make
 ```
 Note that this is a cross-compiler CMake file so it's better to run it and define HOST and PLATFORM options (see the build.sh) but it's not mandatory.
+To better understand how my cross-compilation works, see [here](https://github.com/philippe44/cross-compiling)
 ## Building using Make
 
 Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, there is a VS2022 project. You'll need some libraires:
