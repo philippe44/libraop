@@ -51,11 +51,10 @@ Note that this is a cross-compiler CMake file so it's better to run it and defin
 Makefiles are provided for OSX, Linux (x86 and ARM). Under Windows, there is a VS2022 project. You'll need some libraires:
 
 - ALAC codec: https://github.com/macosforge/alac and
-
 - Curve25519 crypto: https://github.com/msotoodeh/curve25519
 
 You need pthread for Windows to recompile the player / use the library here: https://www.sourceware.org/pthreads-win32
 
+# Misc
 It's largely inspired from https://github.com/chevil/raop2_play but limit the playback to pcm as it focuses on creating a library and optimizing AirPlay synchronization
-
 Since iOS 10.2, pairing is required with AppleTV. Here is a description of the protocol https://htmlpreview.github.io/?https://github.com/philippe44/RAOP-Player/blob/master/doc/auth_protocol.html
