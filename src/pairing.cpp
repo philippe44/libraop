@@ -43,7 +43,7 @@ static char K[20*2];
 static uint8_t scratch[1024];
 
 typedef struct {
-	std::string name, UDN;
+	std::string UDN;
 	struct in_addr addr;
 	uint16_t port;
 } AppleTV;
@@ -73,7 +73,7 @@ static bool searchCallback(mdnssd_service_t* slist, void* cookie, bool* stop) {
 		auto pk = GetmDNSAttribute(s->attr, s->attr_count, "pk");
 
 		if (am.find("appletv") != std::string::npos && !pk.empty()) {
-			ATV.push_back({ s->name, "", s->addr, s->port });
+			ATV.push_back({ s->name, s->addr, s->port });
 		}
 	}
 
@@ -169,6 +169,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 	char response[32] = { };
 	AppleTV *player = NULL;
 	struct mdnssd_handle_s* mDNS = mDNShandle;
+	ATV.clear();
 
 	if (!mDNS) {
 		struct in_addr host = get_interface(NULL, NULL, &netmask);
@@ -186,7 +187,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 	// list devices
 	printf("\npick an AppleTV or type \"exit\" to leave pairing mode\n\n");
 	for (auto &device : ATV) {
-		printf("%-15s => %s\n", inet_ntoa(device.addr), device.name.c_str());
+		printf("%-15s => %s\n", inet_ntoa(device.addr), device.UDN.c_str());
 	}
 
 	printf("\nIP address: ");
@@ -391,9 +392,9 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 				if (1) {
 #endif
 
-					printf("Success!\nSecret is %s\n", *pSecret);
+					printf("success!\nsecret is %s\n", *pSecret);
 				} else {
-					printf("Can't authentify, error %s", resource);
+					printf("can't authentify, error %s", resource);
 				}
 			}
 		}
