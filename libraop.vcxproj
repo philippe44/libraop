@@ -68,7 +68,7 @@
       <AdditionalIncludeDirectories>crosstools\src;dmap-parser;libmdns\targets\include\mdnssvc;libmdns\targets\include\mdnssd;libcodecs\targets\include\flac;libcodecs\targets\include\shine;libcodecs\targets\include\addons;libpthreads4w\targets\win32\x86\include;libopenssl\targets\win32\x86\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4267;4244;5105</DisableSpecificWarnings>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

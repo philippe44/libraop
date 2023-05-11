@@ -14,21 +14,16 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x86 = Debug|x86
 		Release|x86 = Release|x86
-		Static|x86 = Static|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Debug|x86.ActiveCfg = Debug|Win32
 		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Debug|x86.Build.0 = Debug|Win32
 		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Release|x86.ActiveCfg = Release|Win32
 		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Release|x86.Build.0 = Release|Win32
-		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Static|x86.ActiveCfg = Static|Win32
-		{AFB3D404-7084-434B-A25E-9C5BDC3FA40A}.Static|x86.Build.0 = Static|Win32
 		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Debug|x86.ActiveCfg = Debug|Win32
 		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Debug|x86.Build.0 = Debug|Win32
 		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Release|x86.ActiveCfg = Release|Win32
 		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Release|x86.Build.0 = Release|Win32
-		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Static|x86.ActiveCfg = Debug|Win32
-		{31FA7682-7D64-4B3F-99DD-5A3423D18DCA}.Static|x86.Build.0 = Debug|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
