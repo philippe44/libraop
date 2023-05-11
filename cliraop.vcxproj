@@ -68,7 +68,7 @@
       <AdditionalIncludeDirectories>crosstools\src;libpthreads4w\targets\win32\x86\include;libopenssl\targets\win32\x86\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4267;4244;5105</DisableSpecificWarnings>
-      <LanguageStandard_C Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">stdc11</LanguageStandard_C>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
