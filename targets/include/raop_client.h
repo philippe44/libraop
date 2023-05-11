@@ -166,4 +166,8 @@ bool 	raopcl_sanitize(struct raopcl_s *p);
 
 uint64_t 	raopcl_time32_to_ntp(uint32_t time);
 
+struct mdnssd_handle_s;
+
+bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char** pUDN, char** pSecret);
+
 #endif

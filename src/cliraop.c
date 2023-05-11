@@ -80,6 +80,7 @@ static int print_usage(char *argv[])
 			   "\t[-u] for authentication (only if crypto present in TXT record)\n"
    			   "\t[-a] send ALAC compressed audio\n"
 			   "\t[-s <secret>] (valid secret for AppleTV)\n"
+			   "\t[-r] do AppleTV pairing\n"
 			   "\t[-t <et>] (et field in mDNS - 4 for airport-express and used to detect MFi)\n"
 			   "\t[-m <[0][,1][,2]>] (md in mDNS: metadata capabilties 0=text, 1=artwork, 2=progress)\n"
 			   "\t[-d <debug level>] (0 = silent)\n"
@@ -171,7 +172,7 @@ int main(int argc, char *argv[]) {
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	uint64_t start = 0, start_at = 0, last = 0, frames = 0;
-	bool interactive = false, alac = false;
+	bool interactive = false, alac = false, pairing = false;
 	char *secret = NULL, *md = NULL, *et = NULL;
 	bool auth = false;
 	struct in_addr host = { INADDR_ANY };
@@ -206,6 +207,8 @@ int main(int argc, char *argv[]) {
 			auth = true;
 		} else if (!strcmp(argv[i],"-a")) {
 			alac = true;
+		} else if (!strcmp(argv[i], "-r")) {
+			pairing = true;
 		} else if(!strcmp(argv[i],"-n")) {
 			sscanf(argv[++i], "%" PRIu64, &start);
 		} else if (!strcmp(argv[i],"-nf")) {
@@ -255,6 +258,10 @@ int main(int argc, char *argv[]) {
 
 	init_platform(interactive);
 
+	// if required, pair with appleTV
+	if (pairing) AppleTVpairing(NULL, NULL, &secret);
+	
+	// create the raop context
 	if ((raopcl = raopcl_create(host, 0, 0, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, MAX_SAMPLES_PER_CHUNK,
 								latency, crypto, auth, secret, et, md,
 								44100, 16, 2,

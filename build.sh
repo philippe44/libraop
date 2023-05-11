@@ -79,10 +79,13 @@ do
 	export CFLAGS="${cflags[$cc]}"
 	export CC=${alias[$cc]:-$cc}
 	
-	# don't let clang create temp files
-	if [[ $CC =~ -cc ]]; then
-		CFLAGS+="-fno-temp-file"
-	fi		
+	# don't let clang create temp files  
+    if [[ $CC =~ -gcc ]]; then
+		export CXX=${CC%-*}-g++
+	else
+		export CXX=${CC%-*}-c++
+		CFLAGS+=" -fno-temp-file -stdlib=libc++"
+	fi
 	
 	target=targets/$host/$platform	
 	mkdir -p targets/include	

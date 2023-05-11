@@ -48,14 +48,15 @@ SOURCES = raop_client.c rtsp_client.c \
 	  raop_server.c raop_streamer.c \
 	  aes.c base64.c aes_ctr.c base64.c \
 	  dmap_parser.c	\
-	  alac.c 
+	  alac.c \
+	  bplist.cpp pairing.cpp
 		  
 SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c 		  
 		  
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES)))
 OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES)))
 
-LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a
+LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a $(MDNS)/$(HOST)/$(PLATFORM)/libmdns.a
 
 ifneq ($(STATIC),)
 LIBRARY	+= $(OPENSSL)/libopenssl.a
