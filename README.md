@@ -16,6 +16,7 @@ usage: ./build/raop_play <options> <server_ip> <filename ('-' for stdin)>
 	[-nf <start>] (start at NTP in <file> + <wait>)
 	[-e] (encrypt)
 	[-s <secret>] (valid secret for AppleTV)
+	[-r] (do interactive pairing with AppleTV)
 	[-d <debug level>] (0 = silent)
 	[-i] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)
 ```
