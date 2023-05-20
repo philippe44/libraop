@@ -607,13 +607,8 @@ static void event_cb(void *owner, raopst_event_t event) {
 	switch(event) {
 		case RAOP_STREAMER_PLAY:
 			ctx->raop_cb(ctx->owner, RAOP_PLAY, (uint32_t) ctx->hport);
-			// need to resend metadata if available as raop does not on seeking
-			/*/
-			if (ctx->metadata.title) {
-				ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
-				raopst_metadata(ctx->ht, &ctx->metadata);
-			}
-			*/
+			// in case of play after FLUSH, usually no metadata is re-sent
+			if (ctx->metadata.title) ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
 			break;
 		default:
 			LOG_ERROR("[%p]: unknown hairtunes event", ctx, event);

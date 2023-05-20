@@ -632,6 +632,8 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		if (ctx->silence && memcmp(abuf->data, ctx->silence_frame, abuf->len)) {
 			ctx->event_cb(ctx->owner, RAOP_STREAMER_PLAY);
 			ctx->silence = false;
+			// if we have some metadata, just do a refresh (case of FLUSH not sending metadata)
+			if (ctx->metadata.title) ctx->icy.updated = true;
 		}
 	}
 
