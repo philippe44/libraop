@@ -719,8 +719,10 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 	raopsr_metadata_t *metadata = (raopsr_metadata_t *) ctx;
 
 	// make sure we stay null-terminated
+	/*
 	if (!strcasecmp(code, "minm")) metadata->title = strndup(buf, len);
 	else if (!strcasecmp(code, "asar")) metadata->artist = strndup(buf, len);
 	else if (!strcasecmp(code, "asal")) metadata->album = strndup(buf, len);
+	*/
 }
 
