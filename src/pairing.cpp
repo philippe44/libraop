@@ -397,10 +397,12 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 					printf("can't authentify, error %s", resource);
 				}
 			}
+		} else {
+			printf("pin failed %s", resource);
 		}
 
 		NFREE(body);
-	}
+	} 
 
 	if (a) BN_free(a);
 	if (A) BN_free(A);

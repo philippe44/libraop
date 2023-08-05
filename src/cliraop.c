@@ -236,12 +236,12 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (!player.name) return print_usage(argv);
-	if (!fname) return print_usage(argv);
-
 	util_loglevel = debug[level].util;
 	raop_loglevel = debug[level].raop;
 	main_log = debug[level].main;
+
+	if (!player.name && !pairing) return print_usage(argv);
+	if (!fname && !pairing) return print_usage(argv);
 
 	if (!strcmp(fname, "-")) {
 		infile = fileno(stdin);
