@@ -809,7 +809,7 @@ bool raopcl_set_artwork(struct raopcl_s *p, char *content_type, int size, char *
 {
 	if (!p || !p->rtspcl || p->state < RAOP_FLUSHED || !(p->md_caps & MD_ARTWORK)) return false;
 
-	return rtspcl_set_artwork(p->rtspcl, p->head_ts, content_type, size, image);
+	return rtspcl_set_artwork(p->rtspcl, p->head_ts + p->latency_frames, content_type, size, image);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -821,7 +821,7 @@ bool raopcl_set_daap(struct raopcl_s *p, int count, ...)
 
 	va_start(args, count);
 
-	return rtspcl_set_daap(p->rtspcl, p->head_ts, count, args);
+	return rtspcl_set_daap(p->rtspcl, p->head_ts + p->latency_frames, count, args);
 }
 
 /*----------------------------------------------------------------------------*/
