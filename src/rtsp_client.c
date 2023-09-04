@@ -552,7 +552,7 @@ bool rtspcl_teardown(struct rtspcl_s *p) {
 static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type,
 				char *content, int length, int get_response, key_data_t *hds,
 				key_data_t *rkd, char **resp_content, int *resp_len, char* url) {
-	char line[2048];
+	char line[2048] = "";
 	char *req;
 	char buf[128];
 	const char delimiters[] = " ";
@@ -621,22 +621,17 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	if (!get_response) return true;
 
 	if (http_read_line(rtspcld->fd, line, sizeof(line), timeout, true) <= 0) {
-		if (get_response == 1) {
-			LOG_ERROR("[%p]: response : %s request failed", rtspcld, line);
-			return false;
-		}
+		LOG_ERROR("[%p]: response : %s request failed", rtspcld, line);
+		if (get_response == 1) return false;
 		else return true;
 	}
 
 	token = strtok(line, delimiters);
 	token = strtok(NULL, delimiters);
 	if (token == NULL || strcmp(token, "200")) {
-		if(get_response == 1) {
-			LOG_ERROR("[%p]: <------ : request failed, error %s", rtspcld, token);
-			return false;
-		}
-	}
-	else {
+		LOG_ERROR("[%p]: <------ : request failed, error %s", rtspcld, line);
+		if (get_response == 1) return false;
+	} else {
 		LOG_DEBUG("[%p]: <------ : %s: request ok", rtspcld, token);
 	}
 
