@@ -1226,6 +1226,7 @@ static bool handle_http(raopst_t *ctx, int sock)
 	key_data_t headers[64], resp[16] = { { NULL, NULL } };
 	size_t offset = 0;
 	int len;
+	bool restart = false;
 	bool HTTP_11;
 
 	if (!http_parse(sock, method, NULL, proto, headers, &body, &len)) return false;
@@ -1241,17 +1242,28 @@ static bool handle_http(raopst_t *ctx, int sock)
 	kd_add(resp, "Content-Type", mime_types[ctx->encode.config.codec]);
 
 	// is there a range request (chromecast non-compliance to HTTP !!!)
-	if (ctx->range && (str = kd_lookup(headers, "Range")) != NULL) {
+	if ((str = kd_lookup(headers, "Range")) != NULL) {
 #if WIN
 		sscanf(str, "bytes=%u", &offset);
 #else
 		sscanf(str, "bytes=%zu", &offset);
-#endif
-		offset = ctx->http_count && ctx->http_count > TAIL_SIZE ? min(offset, ctx->http_count - TAIL_SIZE - 1) : 0;
+#endif	
 		if (offset) {
+			// try to find the position in the memorized data
+			offset = (ctx->range && ctx->http_count && ctx->http_count > TAIL_SIZE) ? min(offset, ctx->http_count - TAIL_SIZE - 1) : 0;
+		} else if (ctx->http_count) {
+			// if bytes have already been sent, try to restart from the beginning (offset = 0)
+			restart = true;
+		}
+
+		// make sure offset is requested and range is allowed
+		if (offset && ctx->range) {
 			if (ctx->http_length == -3 && HTTP_11) head = "HTTP/1.1 206 Partial Content";
 			else head = "HTTP/1.0 206 Partial Content";
 			kd_vadd(resp, "Content-Range", "bytes %zu-%zu/*", offset, ctx->http_count);
+		} else {
+			// otherwise, offset must be 0, even if requested otherwise but it might be a restart
+			offset = 0;
 		}
 	}
 
@@ -1288,7 +1300,7 @@ static bool handle_http(raopst_t *ctx, int sock)
 	if (strstr(method, "HEAD")) return false;
 
 	// need to re-send the range
-	if (offset) {
+	if (offset || restart) {
 		size_t count = 0;
 
 		LOG_INFO("[%p] re-sending offset %zu/%zu", ctx, offset, ctx->http_count);
