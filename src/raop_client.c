@@ -797,10 +797,15 @@ uint64_t raopcl_get_progress_ms(struct raopcl_s* p)
 {
 	uint64_t elapsed, now;
 
-	if (!p || !(p->md_caps & MD_PROGRESS)) return 0;
+	if (!p || p->state < RAOP_FLUSHING || !p->rtspcl || !(p->md_caps & MD_PROGRESS)) return 0;
 
-	now = NTP2TS(raopcl_get_ntp(NULL), p->sample_rate);
+	// if we have no pause_ts and we are flushing or are not streaming, then we are stopped
+	if ((p->flushing || p->state < RAOP_STREAMING) && !p->pause_ts) return 0;
+
+	// we are not stopped, then pause_ts is to be taken into account if not 0
+	now = p->pause_ts ? p->pause_ts : NTP2TS(raopcl_get_ntp(NULL), p->sample_rate);
 	elapsed = TS2MS(now - p->started_ts, p->sample_rate);
+
 	return elapsed;
 }
 
