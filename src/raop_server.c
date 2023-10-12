@@ -367,7 +367,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 	char *buf = NULL, *body = NULL, method[16] = "";
 	key_data_t headers[64], resp[16] = { {NULL, NULL} };
 	int len;
-	bool success = true;
+	char *response = NULL;
 
 	if (!http_parse(sock, method, NULL, NULL, headers, &body, &len)) {
 		NFREE(body);
@@ -477,7 +477,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 			kd_add(resp, "Session", "DEADBEEF");
 			free(transport);
 		} else {
-			success = false;
+			response = "RTSP/1.0 500 Internal Error";
 			LOG_INFO("[%p]: cannot start session, missing ports", ctx);
 		}
 
@@ -576,7 +576,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 				raopst_metadata(ctx->ht, &ctx->metadata);
 		}
 	} else {
-		success = false;
+		response = "RTSP/1.0 501 Not Implemented";
     	LOG_ERROR("[%p]: unknown/unhandled method %s", ctx, method);
 	}
 
@@ -585,8 +585,8 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 	kd_add(resp, "Audio-Jack-Status", "connected; type=analog");
 	kd_add(resp, "CSeq", kd_lookup(headers, "CSeq"));
 
-	if (success) buf = http_send(sock, "RTSP/1.0 200 OK", resp);
-	else buf = http_send(sock, "RTSP/1.0 500 ERROR", NULL);
+	if (!response) buf = http_send(sock, "RTSP/1.0 200 OK", resp);
+	else buf = http_send(sock, response, NULL);
 
 	if (strcmp(method, "OPTIONS")) {
 		LOG_INFO("[%p]: responding:\n%s", ctx, buf ? buf : "<void>");
