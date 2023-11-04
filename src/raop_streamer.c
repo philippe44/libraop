@@ -1293,7 +1293,7 @@ static bool handle_http(raopst_t *ctx, int sock)
 	if (offset || (ctx->http_count && ctx->http_count <= TAIL_SIZE)) {
 		size_t count = 0;
 
-		LOG_INFO("[%p] re-sending offset %zu/%zu", ctx, offset, ctx->http_count);
+		LOG_INFO("[%p] re-sending bytes %zu-%zu", ctx, offset, ctx->http_count);
 		ctx->silence_count = 0;
 		while (count != ctx->http_count - offset) {
 			size_t bytes = ctx->icy.interval ? ctx->icy.remain : ICY_INTERVAL;
