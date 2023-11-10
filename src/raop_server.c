@@ -14,7 +14,6 @@
 #include "mdnssvc.h"
 #include "mdnssd.h"
 #include "cross_util.h"
-#include "base64.h"
 #include "raop_server.h"
 #include "raop_streamer.h"
 #include "dmap_parser.h"

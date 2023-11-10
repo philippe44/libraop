@@ -23,10 +23,10 @@
 #include "alac_wrapper.h"
 #include "cross_net.h"
 #include "cross_log.h"
+#include "cross_util.h"
 
 #include "rtsp_client.h"
 #include "raop_client.h"
-#include "base64.h"
 #include "aes.h"
 
 #define MAX_BACKLOG 512

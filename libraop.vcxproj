@@ -15,7 +15,6 @@
     <ClCompile Include="src\aes.c" />
     <ClCompile Include="src\aes_ctr.c" />
     <ClCompile Include="src\alac.c" />
-    <ClCompile Include="src\base64.c" />
     <ClCompile Include="src\bplist.cpp" />
     <ClCompile Include="src\cliraop.c" />
     <ClCompile Include="src\pairing.cpp" />
@@ -25,7 +24,6 @@
     <ClCompile Include="src\rtsp_client.c" />
     <ClInclude Include="src\aes.h" />
     <ClInclude Include="src\aes_ctr.h" />
-    <ClInclude Include="src\base64.h" />
     <ClInclude Include="src\raop_client.h" />
     <ClInclude Include="src\rtsp_client.h" />
   </ItemGroup>
@@ -44,10 +42,10 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <TargetName>$(ProjectName)</TargetName>
-  </PropertyGroup>  
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <TargetName>$(ProjectName)_d</TargetName>
-  </PropertyGroup>  
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
@@ -76,7 +74,7 @@
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
-  </ItemDefinitionGroup>    
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
