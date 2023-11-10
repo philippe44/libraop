@@ -218,7 +218,7 @@ char* rtspcl_local_ip(struct rtspcl_s *p) {
 bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp, char *passwd) {
 	if(!p) return false;
 
-	if (passwd) {
+	if (passwd && *passwd) {
 		char* auth;
 		key_data_t kd[MAX_KD] = { 0 };
 
