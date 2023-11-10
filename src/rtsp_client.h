@@ -33,7 +33,7 @@ bool rtspcl_is_sane(struct rtspcl_s *p);
 bool rtspcl_options(struct rtspcl_s *p, key_data_t *rkd);
 bool rtspcl_pair_verify(struct rtspcl_s *p, char *secret);
 bool rtspcl_auth_setup(struct rtspcl_s *p);
-bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp);
+bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp, char *passwd);
 bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *kd);
 bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, key_data_t *kd);
 bool rtspcl_set_parameter(struct rtspcl_s *p, char *param);

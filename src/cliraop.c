@@ -80,6 +80,7 @@ static int print_usage(char *argv[])
 			   "\t[-u] for authentication (only if crypto present in TXT record)\n"
    			   "\t[-a] send ALAC compressed audio\n"
 			   "\t[-s <secret>] (valid secret for AppleTV)\n"
+			   "\t[-P <password>] (device password)\n"
 			   "\t[-r] do AppleTV pairing\n"
 			   "\t[-t <et>] (et field in mDNS - 4 for airport-express and used to detect MFi)\n"
 			   "\t[-m <[0][,1][,2]>] (md in mDNS: metadata capabilties 0=text, 1=artwork, 2=progress)\n"
@@ -160,6 +161,7 @@ int main(int argc, char *argv[]) {
 	struct raopcl_s *raopcl;
 	char *fname = NULL;
 	int port = 5000;
+	char* passwd = NULL;
 	int volume = 50, wait = 0, latency = MS2TS(1000, 44100);
 	struct {
 		struct hostent *hostent;
@@ -227,6 +229,10 @@ int main(int argc, char *argv[]) {
 		} else if(!strcmp(argv[i],"-e")) {
 			crypto = RAOP_RSA;
 			continue;
+		}
+		else if (!strcmp(argv[i], "-P")) {
+			passwd = argv[++i];
+			continue;
 		} else if(!strcmp(argv[i],"--help") || !strcmp(argv[i],"-h")) {
 			return print_usage(argv);
 		} else if (!player.name) {
@@ -263,7 +269,7 @@ int main(int argc, char *argv[]) {
 	
 	// create the raop context
 	if ((raopcl = raopcl_create(host, 0, 0, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, MAX_SAMPLES_PER_CHUNK,
-								latency, crypto, auth, secret, et, md,
+								latency, crypto, auth, secret, passwd, et, md,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);

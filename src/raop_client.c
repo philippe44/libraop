@@ -172,6 +172,7 @@ typedef struct raopcl_s {
 	char et[16];
 	uint8_t md_caps;
 	uint16_t port_base, port_range;
+	char passwd[64];
 } raopcl_data_t;
 
 
@@ -660,7 +661,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t port_range,
 							   char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int chunk_len, int latency_frames,
-							   raop_crypto_t crypto, bool auth, char *secret,
+							   raop_crypto_t crypto, bool auth, char *secret, char* passwd,
 							   char *et, char *md,
 							   int sample_rate, int sample_size, int channels, float volume)
 {
@@ -684,6 +685,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	raopcld->codec = codec;
 	raopcld->crypto = crypto;
 	raopcld->auth = auth;
+	if (passwd) strncpy(raopcld->passwd, passwd, sizeof(raopcld->passwd) - 1);
 	if (secret) strncpy(raopcld->secret, secret, SECRET_SIZE);
 	if (et) strncpy(raopcld->et, et, 16);
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
@@ -1037,9 +1039,9 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 		base64_encode(&seed.sac, 16, &sac);
 		strremovechar(sac, '=');
 		if (!rtspcl_add_exthds(p->rtspcl, "Apple-Challenge", sac)) goto erexit;
-		if (!rtspcl_announce_sdp(p->rtspcl, sdp))goto erexit;
+		if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd))goto erexit;
 		if (!rtspcl_mark_del_exthds(p->rtspcl, "Apple-Challenge")) goto erexit;
-	} else if (!rtspcl_announce_sdp(p->rtspcl, sdp)) {
+	} else if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd)) {
 		goto erexit;
 	}
 

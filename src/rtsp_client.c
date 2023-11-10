@@ -18,6 +18,7 @@
 #else
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <openssl/md5.h>
 #endif
 
 #include "platform.h"
@@ -43,6 +44,10 @@ typedef struct rtspcl_s {
 	char *session;
 	const char *useragent;
 	struct in_addr local_addr;
+	struct {
+		char realm[16], nonce[256+1];
+		char ha1[32+1];
+	} digest;
 } rtspcl_t;
 
 extern log_level 	raop_loglevel;
@@ -210,8 +215,33 @@ char* rtspcl_local_ip(struct rtspcl_s *p) {
 }
 
 /*----------------------------------------------------------------------------*/
-bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp) {
+bool rtspcl_announce_sdp(struct rtspcl_s *p, char *sdp, char *passwd) {
 	if(!p) return false;
+
+	if (passwd) {
+		char* auth;
+		key_data_t kd[MAX_KD] = { 0 };
+
+		// execute an announce request and parse the output to get realm and nonce
+		exec_request(p, "ANNOUNCE", "application/sdp", sdp, 0, 2, NULL, kd, NULL, NULL, NULL);
+
+		if ((auth = kd_lookup(kd, "WWW-Authenticate")) != NULL) {
+			char * buf;
+
+			if ((buf = strcasestr(auth, "realm")) != NULL) sscanf(buf, "realm%*[^\"]\"%16[^\"]", p->digest.realm);
+			if ((buf = strcasestr(auth, "nonce")) != NULL) sscanf(buf, "nonce%*[^\"]\"%256[^\"]", p->digest.nonce);
+
+			// so that we don't keep password in memory
+			asprintf(&buf, "%s:%s:%s", !strcasecmp(p->digest.realm, "raop") ? "iTunes" : "AirPlay", p->digest.realm, passwd);
+
+			uint8_t ha1_bin[16];
+			MD5((uint8_t*) buf, strlen(buf), ha1_bin);
+			free(buf); buf = (char*) p->digest.ha1;
+			bytes2hex(ha1_bin, sizeof(ha1_bin), &buf);
+		}
+
+		kd_free(kd);
+	}
 
 	return exec_request(p, "ANNOUNCE", "application/sdp", sdp, 0, 1, NULL, NULL, NULL, NULL, NULL);
 }
@@ -599,6 +629,27 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	if (rtspcld->session != NULL )    {
 		sprintf(buf,"Session: %s\r\n",rtspcld->session);
 		strcat(req, buf);
+	}
+
+	// add digest if we have a password
+	if (*rtspcld->digest.ha1) {
+		char* buf, digest[32+1];
+		asprintf(&buf, "%s:%s", cmd, url ? url : rtspcld->url);
+		unsigned char ha2_bin[16], ha2[32+1];
+		MD5((uint8_t*) buf, strlen(buf), ha2_bin);
+
+		free(buf); buf = (char*) ha2;
+		bytes2hex(ha2_bin, sizeof(ha2_bin), &buf);
+		asprintf(&buf, "%s:%s:%s", rtspcld->digest.ha1, rtspcld->digest.nonce, ha2);
+		unsigned char digest_bin[16];
+		MD5((uint8_t*) buf, strlen(buf), digest_bin);
+
+		free(buf); buf = digest;
+		bytes2hex(digest_bin, sizeof(digest_bin), &buf);
+
+		sprintf(req + strlen(req), "Authorization: Digest username=\"%s\", realm=\"%s\", nonce=\"%s\", uri=\"%s\", response=\"%s\"\r\n", 
+			!strcasecmp(rtspcld->digest.realm, "raop") ? "iTunes" : "AirPlay", rtspcld->digest.realm,
+			rtspcld->digest.nonce, url ? url : rtspcld->url, digest);
 	}
 
 	strcat(req,"\r\n");

@@ -123,7 +123,7 @@ uint64_t raopcl_get_ntp(struct ntp_s* ntp);
 struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t port_range,
 							   char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int frame_len, int latency_frames,
-							   raop_crypto_t crypto, bool auth, char *secret,
+							   raop_crypto_t crypto, bool auth, char *secret, char *passwd,
 							   char *et, char *md,
 							   int sample_rate, int sample_size, int channels, float volume);
 

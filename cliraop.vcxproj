@@ -67,7 +67,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <Link>
-      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <!-- <GenerateDebugInformation>false</GenerateDebugInformation> -->
+      <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
