@@ -28,7 +28,7 @@ static bool searchCallback(mdnssd_service_t* slist, void *context, bool* stop) {
 		char* am = NULL;
 		bool (*excluded)(char*, char*) = (bool (*)(char*, char*)) (context);
 		for (int i = 0; i < s->attr_count; i++)	if (!strcasecmp(s->attr[i].name, "am")) am = s->attr[i].value;
-		if (!am || (excluded && !excluded(am, s->name))) queue_insert(&players, strdup(s->name));
+		if (excluded && !excluded(am, s->name)) queue_insert(&players, strdup(s->name));
 	}
 	return false;
 }
