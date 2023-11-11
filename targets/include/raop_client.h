@@ -169,6 +169,6 @@ uint64_t 	raopcl_time32_to_ntp(uint32_t time);
 struct mdnssd_handle_s;
 
 bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char** pUDN, char** pSecret);
-bool AirPlayPassword(struct mdnssd_handle_s* mDNShandle, char* excluded, char** UDN, char** passwd);
+bool AirPlayPassword(struct mdnssd_handle_s* mDNShandle, bool (*excluded)(char *), char** UDN, char** passwd);
 
 #endif
