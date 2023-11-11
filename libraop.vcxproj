@@ -18,6 +18,7 @@
     <ClCompile Include="src\bplist.cpp" />
     <ClCompile Include="src\cliraop.c" />
     <ClCompile Include="src\pairing.cpp" />
+    <ClCompile Include="src\password.c" />
     <ClCompile Include="src\raop_client.c" />
     <ClCompile Include="src\raop_server.c" />
     <ClCompile Include="src\raop_streamer.c" />

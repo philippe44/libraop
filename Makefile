@@ -49,7 +49,7 @@ SOURCES = raop_client.c rtsp_client.c \
 	  aes.c base64.c aes_ctr.c base64.c \
 	  dmap_parser.c	\
 	  alac.c \
-	  bplist.cpp pairing.cpp
+	  bplist.cpp pairing.cpp password.c
 		  
 SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c 		  
 		  

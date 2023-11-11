@@ -1,5 +1,5 @@
 /*
- *  SpotRaop - Spotify to AirPlay bridge
+ *  RAOP server: control an AirPlay-1 client
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
