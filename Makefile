@@ -46,7 +46,7 @@ CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve
 
 SOURCES = raop_client.c rtsp_client.c \
 	  raop_server.c raop_streamer.c \
-	  aes.c base64.c aes_ctr.c base64.c \
+	  aes.c aes_ctr.c \
 	  dmap_parser.c	\
 	  alac.c \
 	  bplist.cpp pairing.cpp password.c
