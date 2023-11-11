@@ -26,14 +26,14 @@ static bool searchCallback(mdnssd_service_t* slist, void *context, bool* stop) {
 		if (!s->name || (s->host.s_addr != s->addr.s_addr && ((s->host.s_addr & netmask) == (s->addr.s_addr & netmask)))) continue;
 
 		char* am = NULL;
-		bool (*excluded)(char*) = (bool (*)(char*)) (context);
+		bool (*excluded)(char*, char*) = (bool (*)(char*, char*)) (context);
 		for (int i = 0; i < s->attr_count; i++)	if (!strcasecmp(s->attr[i].name, "am")) am = s->attr[i].value;
-		if (!am || (excluded && !excluded(am))) queue_insert(&players, strdup(s->name));
+		if (!am || (excluded && !excluded(am, s->name))) queue_insert(&players, strdup(s->name));
 	}
 	return false;
 }
 
-bool AirPlayPassword(struct mdnssd_handle_s* mDNShandle, bool (*excluded)(char *), char** UDN, char** passwd) {
+bool AirPlayPassword(struct mdnssd_handle_s* mDNShandle, bool (*excluded)(char*, char*), char** UDN, char** passwd) {
 	struct mdnssd_handle_s* mDNS = mDNShandle;
 
 	// create a queue for player's name (UDN)
