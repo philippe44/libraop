@@ -478,6 +478,7 @@ bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, boo
 			ctx->playing = false;
 			ctx->synchro.first = false;
 			ctx->http_ready = false;
+			ctx->http_count = 0;
 			encoder_close(ctx);
 		}
 		if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
@@ -616,7 +617,7 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		LOG_DEBUG("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	}
 
-	if (!(ctx->in_frames++ & 0x1ff)) {
+	if (!(ctx->in_frames++ & 0x3ff)) {
 		LOG_INFO("[%p]: fill [level:%hu] [W:%hu R:%hu]", ctx, (seq_t) ctx->ab_write - ctx->ab_read + 1, ctx->ab_write, ctx->ab_read);
 	}
 
@@ -932,9 +933,12 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 
 	LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
 
-	// wait if not ready but have time, otherwise send silence
-	if ((!buf_fill && !ctx->http_fill) || ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (now < playtime && !curframe->ready)) {
+	/* wait when we don't have a sync but wait as well when frame is not ready and we have time or if we have 
+	 * no data available and we are not allowed to fill. To fill in case of empty buffer, we must be sure it's 
+	 * not happening before a first frame has been received */
+	if (ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (!curframe->ready && (now < playtime || (!buf_fill && !(ctx->http_fill && ctx->http_count))))) {
 		LOG_SDEBUG("[%p]: waiting (fill:%hd, W:%hu R:%hu) now:%u, playtime:%u, wait:%d", ctx, buf_fill, ctx->ab_write, ctx->ab_read, now, playtime, playtime - now);
+
 		// look for "blocking" frames at the top of the queue and try to catch-up
 		for (i = 0; i < min(16, buf_fill); i++) {
 			abuf_t *frame = ctx->audio_buffer + BUFIDX(ctx->ab_read + i);
@@ -943,22 +947,32 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 				frame->last_resend = now;
 			}
 		}
+
 		return NULL;
 	}
 
-	// when silence is inserted at the top, need to move write pointer
-	if (!buf_fill) {
-		if (!ctx->filled_frames) {
-			LOG_WARN("[%p]: start silence (late %d ms) [W:%hu R:%hu]", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
-		}
-		ctx->ab_write++;
-		ctx->filled_frames++;
-	} else ctx->filled_frames = 0;
+	// if frame is not ready, create silence
+	if (!curframe->ready) {
+		LOG_DEBUG("[%p]: created zero frame at %d (W: % hu R : % hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
+		memset(curframe->data, 0, ctx->frame_size * 4);
+		curframe->len = ctx->frame_size * 4;
+		ctx->silent_frames++;
 
-	if (!(ctx->out_frames++ & 0x1ff)) {
+		// when silence is inserted at the top, need to move write pointer as well
+		if (!buf_fill) {
+			ctx->ab_write++;
+			ctx->filled_frames++;
+		}
+	} else {
+		LOG_SDEBUG("[%p]: prepared frame (fill:%hd, W:%hu R:%hu)", ctx, buf_fill - 1, ctx->ab_write, ctx->ab_read);
+	}
+
+	// a bit of logging from time to time or when we have a network blackout
+	if (!(ctx->out_frames++ & 0x3ff) || ctx->filled_frames > 100) {
 		LOG_INFO("[%p]: drain [level:%hd gap:%d] [W:%hu R:%hu] [R:%u S:%u F:%u]",
 					ctx, buf_fill-1, playtime - now, ctx->ab_write, ctx->ab_read,
 					ctx->resent_frames, ctx->silent_frames, ctx->filled_frames);
+		ctx->filled_frames = 0;
 	}
 
 	// each missing packet will be requested up to (latency_frames / 16) times
@@ -968,16 +982,6 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 			rtp_request_resend(ctx, ctx->ab_read + i, ctx->ab_read + i);
 			frame->last_resend = now;
 		}
-	}
-
-
-	if (!curframe->ready) {
-		LOG_DEBUG("[%p]: created zero frame (W:%hu R:%hu)", ctx, ctx->ab_write, ctx->ab_read);
-		memset(curframe->data, 0, ctx->frame_size*4);
-		curframe->len = ctx->frame_size * 4;
-		ctx->silent_frames++;
-	} else {
-		LOG_SDEBUG("[%p]: prepared frame (fill:%hd, W:%hu R:%hu)", ctx, buf_fill-1, ctx->ab_write, ctx->ab_read);
 	}
 
 	*len = curframe->len;
