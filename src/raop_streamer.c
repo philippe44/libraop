@@ -50,8 +50,8 @@ static log_level 	*loglevel = &raop_loglevel;
 #define ENCODE_BUFFER_SIZE	(max(MAX_FLAC_BYTES, SHINE_MAX_SAMPLES*2*2*2))
 #define TAIL_SIZE (2048*1024)
 
-#define RTP_SYNC	(0x01)
-#define NTP_SYNC	(0x02)
+#define RTP_SYNC 0x01
+#define NTP_SYNC 0x02
 
 #define RESEND_TO	200
 
@@ -117,7 +117,7 @@ typedef struct raopst_s {
 	} rtp_sockets[3]; 					 // data, control, timing
 	struct timing_s {
 		bool drift;
-		uint64_t local, remote;
+		uint64_t local, remote, rtp_remote;
 		uint32_t count, gap_count;
 		int64_t gap_sum, gap_adjust;
 	} timing;
@@ -478,7 +478,6 @@ bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, boo
 			ctx->playing = false;
 			ctx->synchro.first = false;
 			ctx->http_ready = false;
-			ctx->http_count = 0;
 			encoder_close(ctx);
 		}
 		if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
@@ -674,7 +673,7 @@ static void *rtp_thread_func(void *arg) {
 		plen = recvfrom(ctx->rtp_sockets[idx].sock, packet, sizeof(packet), 0, (struct sockaddr*) &ctx->rtp_host, &rtp_client_len);
 
 		if (!ntp_sent) {
-			LOG_WARN("[%p]: NTP request not send yet", ctx);
+			LOG_WARN("[%p]: NTP request not sent yet", ctx);
 			ntp_sent = rtp_request_timing(ctx);
 		}
 
@@ -720,18 +719,22 @@ static void *rtp_thread_func(void *arg) {
 			// sync packet
 			case 0x54: {
 				uint32_t rtp_now_latency = ntohl(*(uint32_t*)(pktp+4));
-				uint64_t remote = (((uint64_t) ntohl(*(uint32_t*)(pktp+8))) << 32) + ntohl(*(uint32_t*)(pktp+12));
 				uint32_t rtp_now = ntohl(*(uint32_t*)(pktp+16));
 
 				pthread_mutex_lock(&ctx->ab_mutex);
 
+				// memorize that remote timing for when NTP adjustment arrives
+				ctx->timing.rtp_remote = (((uint64_t)ntohl(*(uint32_t*)(pktp + 8))) << 32) + ntohl(*(uint32_t*)(pktp + 12));
+
 				// re-align timestamp and expected local playback time
 				if (!ctx->latency) ctx->latency = rtp_now - rtp_now_latency;
 				ctx->synchro.rtp = rtp_now - ctx->latency;
-				ctx->synchro.time = ctx->timing.local + (uint32_t) NTP2MS(remote - ctx->timing.remote);
 
 				// now we are synced on RTP frames
-				ctx->synchro.status |= RTP_SYNC;
+				if ((ctx->synchro.status & RTP_SYNC) == 0) {
+					ctx->synchro.status |= RTP_SYNC;
+					LOG_INFO("[%p]: 1st RTP packet received", ctx);
+				}
 
 				// 1st sync packet received (signals a restart of playback)
 				if (packet[0] & 0x10) {
@@ -739,10 +742,16 @@ static void *rtp_thread_func(void *arg) {
 					LOG_INFO("[%p]: 1st sync packet received", ctx);
 				}
 
-				pthread_mutex_unlock(&ctx->ab_mutex);
+				// we can't adjust timing if we don't have NTP
+				if (ctx->synchro.status & NTP_SYNC) {
+					ctx->synchro.time = ctx->timing.local + (uint32_t)NTP2MS(ctx->timing.rtp_remote - ctx->timing.remote);
+					LOG_DEBUG("[%p]: sync packet rtp_latency:%u rtp:%u remote ntp:%" PRIx64 ", local time % u(now: % u)",
+						ctx, rtp_now_latency, rtp_now, ctx->timing.rtp_remote, ctx->synchro.time, gettime_ms());
+				} else {
+					LOG_INFO("[%p]: NTP not acquired yet", ctx);
+				}
 
-				LOG_DEBUG("[%p]: sync packet rtp_latency:%u rtp:%u remote ntp:%" PRIx64 ", local time % u(now: % u)",
-						  ctx, rtp_now_latency, rtp_now, remote, ctx->synchro.time, gettime_ms());
+				pthread_mutex_unlock(&ctx->ab_mutex);
 
 				if (!count--) {
 					rtp_request_timing(ctx);
@@ -814,8 +823,14 @@ static void *rtp_thread_func(void *arg) {
 					pthread_mutex_unlock(&ctx->ab_mutex);
 				}
 
+				// re-adjust the synchro time in case it could not have been done by first RTP because NTP was missing
+				ctx->synchro.time = ctx->timing.local + (uint32_t)NTP2MS(ctx->timing.rtp_remote - ctx->timing.remote);
+
 				// now we are synced on NTP (mutex not needed)
-				ctx->synchro.status |= NTP_SYNC;
+				if ((ctx->synchro.status & NTP_SYNC) == 0) {
+					LOG_INFO("[%p]: 1st NTP packet received", ctx);
+					ctx->synchro.status |= NTP_SYNC;
+				}
 
 				LOG_DEBUG("[%p]: Timing references local:%" PRIu64 ", remote: %" PRIx64 " (delta : %" PRId64 ", sum : %" PRId64 ", adjust : %" PRId64 ", gaps : % d)",
 						  ctx, ctx->timing.local, ctx->timing.remote, delta, ctx->timing.gap_sum, ctx->timing.gap_adjust, ctx->timing.gap_count);
@@ -934,9 +949,8 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 	LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
 
 	/* wait when we don't have a sync but wait as well when frame is not ready and we have time or if we have 
-	 * no data available and we are not allowed to fill. To fill in case of empty buffer, we must be sure it's 
-	 * not happening before a first frame has been received */
-	if (ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (!curframe->ready && (now < playtime || (!buf_fill && !(ctx->http_fill && ctx->http_count))))) {
+	 * no data available and we are not allowed to fill */
+	if (ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (!curframe->ready && (now < playtime || (!buf_fill && !ctx->http_fill)))) {
 		LOG_SDEBUG("[%p]: waiting (fill:%hd, W:%hu R:%hu) now:%u, playtime:%u, wait:%d", ctx, buf_fill, ctx->ab_write, ctx->ab_read, now, playtime, playtime - now);
 
 		// look for "blocking" frames at the top of the queue and try to catch-up
@@ -953,7 +967,9 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 
 	// if frame is not ready, create silence
 	if (!curframe->ready) {
-		LOG_DEBUG("[%p]: created zero frame at %d (W: % hu R : % hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
+		if (!ctx->filled_frames || *loglevel >= lDEBUG) {
+			LOG_INFO("[%p]: created zero frame at %d (W: % hu R : % hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
+		}
 		memset(curframe->data, 0, ctx->frame_size * 4);
 		curframe->len = ctx->frame_size * 4;
 		ctx->silent_frames++;
