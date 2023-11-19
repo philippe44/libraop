@@ -1333,7 +1333,7 @@ static bool handle_http(raopst_t *ctx, int sock)
 			if (ctx->icy.interval) {
 				ctx->icy.remain -= sent;
 				if (!ctx->icy.remain) {
-					send_data(ctx->http_length == -3, sock, "\1", 1, 0);
+					send_data(ctx->http_length == -3, sock, "", 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 				}
 			}
