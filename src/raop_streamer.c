@@ -43,7 +43,7 @@ static log_level 	*loglevel = &raop_loglevel;
 // #define __RTP_STORE
 
 // default buffer size
-#define BUFFER_FRAMES 1024
+#define BUFFER_FRAMES 2048
 #define MAX_PACKET    2048
 #define FLAC_BLOCK_SIZE 1024
 #define MAX_FLAC_BYTES (FLAC_BLOCK_SIZE*4 + 1024)
@@ -576,6 +576,32 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		}
 	}
 
+//#define TEST_PACKET 0.2
+
+#ifdef TEST_PACKET
+	typedef struct {
+		int count, failed;
+		int last;
+		bool active;
+	} test_stat;
+
+	static test_stat test_packet;
+	test_packet.count++;
+	double test_ratio = test_packet.count ? (double)test_packet.failed / test_packet.count : 0.0;
+	if (test_ratio > TEST_PACKET * 1.025) test_packet.active = false;
+	else if (test_ratio < TEST_PACKET * 0.975) test_packet.active = true;
+	if (test_packet.active && ctx->http_count) {
+		if ((rand() % (10 - test_packet.last)) && test_packet.last < 10) {
+			test_packet.last++;
+			test_packet.failed++;
+			pthread_mutex_unlock(&ctx->ab_mutex);
+			return;
+		}
+		test_packet.last = 0;
+	}
+	if (test_packet.count > 3500) test_packet.count = 0;
+#endif
+
 	// release as soon as one recent frame is received
 	if (ctx->pause && seq_order(ctx->flush_seqno, seqno)) ctx->pause = false;
 
@@ -588,18 +614,18 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		// newer than expected
 		if (ctx->latency && seq_order(ctx->latency / ctx->frame_size, seqno - ctx->ab_write - 1)) {
 			// only get rtp latency-1 frames back (last one is seqno)
-			LOG_WARN("[%p] too many missing frames %hu", ctx, seqno - ctx->ab_write - 1);
+			LOG_WARN("[%p] too many missing frames %hu (%hu)", ctx, ctx->ab_write, seqno - ctx->ab_write - 1);
 			ctx->ab_write = seqno - ctx->latency / ctx->frame_size;
 		}
 		if (ctx->delay && seq_order(ctx->delay, seqno - ctx->ab_read)) {
 			// if ab_read is lagging more than http latency, advance it
-			LOG_WARN("[%p] on hold for too long %hu", ctx, seqno - ctx->ab_read + 1);
-			ctx->ab_read = seqno - ctx->delay + 1;
+			LOG_WARN("[%p] on hold for too long %hu (%hu)", ctx, ctx->ab_read, seqno - ctx->ab_read + 1);
+			for (seq_t i = ctx->ab_read; seq_order(i, seqno - ctx->delay + 1); i++) ctx->audio_buffer[BUFIDX(i)].ready = false;
+			ctx->ab_read = seqno - ctx->delay + 1;		
 		}
 		if (rtp_request_resend(ctx, ctx->ab_write + 1, seqno-1)) {
-			seq_t i;
 			uint32_t now = gettime_ms();
-			for (i = ctx->ab_write + 1; seq_order(i, seqno); i++) {
+			for (seq_t i = ctx->ab_write + 1; seq_order(i, seqno); i++) {
 				ctx->audio_buffer[BUFIDX(i)].rtptime = rtptime - (seqno-i)*ctx->frame_size;
 				ctx->audio_buffer[BUFIDX(i)].last_resend = now;
 			}
@@ -613,7 +639,7 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		LOG_DEBUG("[%p]: packet recovered seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	} else {
 		// too late
-		LOG_DEBUG("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
+		LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	}
 
 	if (!(ctx->in_frames++ & 0x3ff)) {
@@ -708,7 +734,7 @@ static void *rtp_thread_func(void *arg) {
 				if (plen < 16) break;
 
 				if ((packet[1] & 0x80) && (type != 0x56)) {
-					LOG_INFO("[%p]: 1st audio packet received", ctx);
+					LOG_INFO("[%p]: 1st audio packet received %hu", ctx, seqno);
 				}
 
 				buffer_put_packet(ctx, seqno, rtptime, packet[1] & 0x80, pktp, plen);
@@ -908,12 +934,8 @@ static bool rtp_request_resend(raopst_t *ctx, seq_t first, seq_t last) {
 /*---------------------------------------------------------------------------*/
 // get the next frame, when available. return 0 if underrun/stream reset.
 static short *_buffer_get_frame(raopst_t *ctx, int *len) {
-	short buf_fill;
-	abuf_t *curframe = 0;
-	int i;
-	uint32_t now, playtime;
-
-	if (!ctx->playing) return NULL;
+	// no frame (even silence) when not playing and not synchronized
+	if (!ctx->playing || ctx->synchro.status != (RTP_SYNC | NTP_SYNC)) return NULL;
 
 	// send silence if required to create enough buffering (want countdown to happen)
 	if ((ctx->silence_count && ctx->silence_count--) || ctx->pause)	{
@@ -929,58 +951,68 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 		LOG_INFO("[%p]: Sending packets too slow (skip: %d) [W:%hu R:%hu]", ctx, ctx->skip, ctx->ab_write, ctx->ab_read);
 	}
 
-	buf_fill = ctx->ab_write - ctx->ab_read + 1;
+	uint32_t now = gettime_ms();
+	short buf_fill = ctx->ab_write - ctx->ab_read + 1;
 
+	// in case of overrun, just reset read pointer to a sane value
 	if (buf_fill >= BUFFER_FRAMES) {
-		LOG_ERROR("[%p]: Buffer overrun %hu", ctx, buf_fill);
+		LOG_WARN("[%p]: Buffer overrun %hu", ctx, buf_fill);
 		ctx->ab_read = ctx->ab_write - (BUFFER_FRAMES - 64);
 		buf_fill = ctx->ab_write - ctx->ab_read + 1;
 	}
 
-	now = gettime_ms();
-	curframe = ctx->audio_buffer + BUFIDX(ctx->ab_read);
+	abuf_t* curframe = ctx->audio_buffer + BUFIDX(ctx->ab_read);
 
-	// use previous frame when buffer is empty or silence continues to be sent
+	// try to request resend missing packet in order, explore up to 64 frames
+	for (int step = max(buf_fill / 64, 1), i = 0, first = 0; seq_order(ctx->ab_read + i, ctx->ab_write); i += step) {
+		abuf_t* frame = ctx->audio_buffer + BUFIDX(ctx->ab_read + i);
+
+		// stop when we reach a ready frame or a recent pending resend
+		if (first && (frame->ready || now - frame->last_resend <= RESEND_TO)) {
+			if (!rtp_request_resend(ctx, first, ctx->ab_read + i - 1)) break;
+			first = 0;
+			i += step - 1;
+		} else if (!frame->ready && now - frame->last_resend > RESEND_TO) {
+			if (!first) first = ctx->ab_read + i;
+			frame->last_resend = now;
+		}
+	}
+
+	// use and update previous frame when buffer is empty (previous is always valid)
 	if (!buf_fill) curframe->rtptime = ctx->audio_buffer[BUFIDX(ctx->ab_read - 1)].rtptime + ctx->frame_size;
 
 	// watch out for 32 bits overflow
-	playtime = ctx->synchro.time + (((int32_t)(curframe->rtptime - ctx->synchro.rtp)) * 1000) / 44100;
-
+	uint32_t playtime = ctx->synchro.time + (((int32_t)(curframe->rtptime - ctx->synchro.rtp)) * 1000) / 44100;
 	LOG_SDEBUG("playtime %u %d [W:%hu R:%hu] %d", playtime, playtime - now, ctx->ab_write, ctx->ab_read, curframe->ready);
 
-	/* wait when we don't have a sync but wait as well when frame is not ready and we have time or if we have 
-	 * no data available and we are not allowed to fill */
-	if (ctx->synchro.status != (RTP_SYNC | NTP_SYNC) || (!curframe->ready && (now < playtime || (!buf_fill && !ctx->http_fill)))) {
+	// wait if frame is not ready and we have time or if we have no frame and are not allowed to fill
+	if (!curframe->ready && (now < playtime || (!buf_fill && !ctx->http_fill))) {
 		LOG_SDEBUG("[%p]: waiting (fill:%hd, W:%hu R:%hu) now:%u, playtime:%u, wait:%d", ctx, buf_fill, ctx->ab_write, ctx->ab_read, now, playtime, playtime - now);
-
-		// look for "blocking" frames at the top of the queue and try to catch-up
-		for (i = 0; i < min(16, buf_fill); i++) {
-			abuf_t *frame = ctx->audio_buffer + BUFIDX(ctx->ab_read + i);
-			if (!frame->ready && now - frame->last_resend > RESEND_TO) {
-				rtp_request_resend(ctx, ctx->ab_read + i, ctx->ab_read + i);
-				frame->last_resend = now;
-			}
-		}
-
 		return NULL;
 	}
 
-	// if frame is not ready, create silence
-	if (!curframe->ready) {
-		if (!ctx->filled_frames || *loglevel >= lDEBUG) {
-			LOG_INFO("[%p]: created zero frame at %d (W: % hu R : % hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
-		}
-		memset(curframe->data, 0, ctx->frame_size * 4);
-		curframe->len = ctx->frame_size * 4;
-		ctx->silent_frames++;
+	/* I'm not 100% that all cases where audio_buffer should be reset are handled so there is a chance 
+	 * that we end-up here with curframe->ready but from an old frame. To avoid that to create a mess
+	 * we'll verify first that buffer is empty. We can be there anyway if case we do filling */
 
+	if (!buf_fill) {
 		// when silence is inserted at the top, need to move write pointer as well
-		if (!buf_fill) {
-			ctx->ab_write++;
-			ctx->filled_frames++;
-		}
+		ctx->ab_write++;
+		ctx->filled_frames++;
+		curframe->ready = 0;
+	} else if (!curframe->ready) {
+		ctx->silent_frames++;
 	} else {
 		LOG_SDEBUG("[%p]: prepared frame (fill:%hd, W:%hu R:%hu)", ctx, buf_fill - 1, ctx->ab_write, ctx->ab_read);
+	}
+
+	if (!curframe->ready) {
+		LOG_DEBUG("[%p]: created zero frame at %d (W:%hu R:%hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
+		memset(curframe->data, 0, ctx->frame_size * 4);
+		*len = ctx->frame_size * 4;
+	} else {
+		*len = curframe->len;
+		curframe->ready = 0;
 	}
 
 	// a bit of logging from time to time or when we have a network blackout
@@ -991,19 +1023,7 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 		ctx->filled_frames = 0;
 	}
 
-	// each missing packet will be requested up to (latency_frames / 16) times
-	for (i = 16; seq_order(ctx->ab_read + i, ctx->ab_write); i += 16) {
-		abuf_t *frame = ctx->audio_buffer + BUFIDX(ctx->ab_read + i);
-		if (!frame->ready && now - frame->last_resend > RESEND_TO) {
-			rtp_request_resend(ctx, ctx->ab_read + i, ctx->ab_read + i);
-			frame->last_resend = now;
-		}
-	}
-
-	*len = curframe->len;
-	curframe->ready = 0;
 	ctx->ab_read++;
-
 	return curframe->data;
 }
 
