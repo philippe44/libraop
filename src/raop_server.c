@@ -29,9 +29,12 @@ typedef struct raopsr_s {
 	int sock;               // socket of the above
 	short unsigned hport; 	// HTTP port of audio server where CC can "GET" audio
 	struct in_addr peer;	// IP of the iDevice (airplay sender)
+	struct {
+		char* codec;
+		bool metadata;
+	} streamer;
 	char *latencies;
 	bool running;
-	raopst_encode_t encode;
 	bool drift;
 	bool flush;
 	pthread_t thread, search_thread;
@@ -79,7 +82,7 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 
 /*----------------------------------------------------------------------------*/
 struct raopsr_s *raopsr_create(struct in_addr host, struct mdnsd *svr, char *name,
-						char *model, unsigned char mac[6], char *codec, bool metadata,
+						char *model, unsigned char mac[6], char *stream_codec, bool stream_metadata,
 						bool drift,	bool flush, char *latencies, void *owner,
 						raopsr_cb_t raop_cb, raop_http_cb_t http_cb,
 						unsigned short port_base, unsigned short port_range,
@@ -111,16 +114,8 @@ struct raopsr_s *raopsr_create(struct in_addr host, struct mdnsd *svr, char *nam
 	ctx->latencies = strdup(latencies);
 	ctx->owner = owner;
 	ctx->drift = drift;
-	if (!strcasecmp(codec, "pcm")) ctx->encode.codec = CODEC_PCM;
-	else if (!strcasecmp(codec, "wav")) ctx->encode.codec = CODEC_WAV;
-	else if (strcasestr(codec, "mp3")) {
-		ctx->encode.codec = CODEC_MP3;
-		ctx->encode.mp3.icy = metadata;
-		if (strchr(codec, ':')) ctx->encode.mp3.bitrate = atoi(strchr(codec, ':') + 1);
-	} else {
-		ctx->encode.codec = CODEC_FLAC;
-		if (strchr(codec, ':')) ctx->encode.flac.level = atoi(strchr(codec, ':') + 1);
-	}
+	ctx->streamer.codec = strdup(stream_codec);
+	ctx->streamer.metadata = stream_metadata;
 
 	// find a free port
 	if (!port_base) port_range = 1;
@@ -214,6 +209,7 @@ void raopsr_delete(struct raopsr_s *ctx) {
 		pthread_join(ctx->search_thread, NULL);
 	}
 
+	NFREE(ctx->streamer.codec);
 	NFREE(ctx->rtsp.aeskey);
 	NFREE(ctx->rtsp.aesiv);
 	NFREE(ctx->rtsp.fmtp);
@@ -459,7 +455,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		if ((p = strcasestr(buf, "timing_port")) != NULL) sscanf(p, "%*[^=]=%hu", &tport);
 		if ((p = strcasestr(buf, "control_port")) != NULL) sscanf(p, "%*[^=]=%hu", &cport);
 
-		ht = raopst_init(ctx->host, ctx->peer, ctx->encode, false, ctx->drift, true, ctx->latencies,
+		ht = raopst_init(ctx->host, ctx->peer, ctx->streamer.codec, ctx->streamer.metadata, false, ctx->drift, true, ctx->latencies,
 							ctx->rtsp.aeskey, ctx->rtsp.aesiv, ctx->rtsp.fmtp,
 							cport, tport, ctx, event_cb, http_cb, ctx->ports.base,
 							ctx->ports.range, ctx->http_length);
@@ -559,7 +555,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 
 			if (!dmap_parse(&settings, body, len)) {
 				ctx->raop_cb(ctx->owner, RAOP_METADATA, &ctx->metadata);
-				raopst_metadata(ctx->ht, &ctx->metadata);
+				if (ctx->streamer.metadata) raopst_metadata(ctx->ht, &ctx->metadata);
 				LOG_INFO("[%p]: received metadata\n\tartist: %s\n\talbum:  %s\n\ttitle:  %s",
 					ctx, ctx->metadata.artist,ctx->metadata.album, ctx->metadata.title);
 			}

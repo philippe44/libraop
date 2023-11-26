@@ -17,24 +17,11 @@ typedef struct {
 	struct raopst_s *ctx;
 } raopst_resp_t;
 
-typedef struct {
-	enum { CODEC_MP3 = 0, CODEC_FLAC, CODEC_PCM, CODEC_WAV} codec;
-	union {
-		struct {
-			int bitrate;
-			bool icy;
-		} mp3;
-		struct {
-			int level;
-		} flac;
-	};
-} raopst_encode_t;
-
 typedef enum { RAOP_STREAMER_PLAY } raopst_event_t;
 
 typedef	void (*raopst_cb_t)(void *owner, raopst_event_t event);
 
-raopst_resp_t 	raopst_init(struct in_addr host, struct in_addr peer, raopst_encode_t codec,
+raopst_resp_t 	raopst_init(struct in_addr host, struct in_addr peer, char *codec, bool metadata,
 							bool sync, bool drift, bool range, char *latencies,
 							char *aeskey, char *aesiv, char *fmtpstr,
 							short unsigned pCtrlPort, short unsigned pTimingPort,

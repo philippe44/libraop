@@ -22,6 +22,7 @@
 #include "alac.h"
 #include "FLAC/stream_encoder.h"
 #include "layer3.h"
+#include "faac.h"
 
 #include "cross_net.h"
 #include "cross_log.h"
@@ -46,20 +47,17 @@ static log_level 	*loglevel = &raop_loglevel;
 #define BUFFER_FRAMES 2048
 #define MAX_PACKET    2048
 #define FLAC_BLOCK_SIZE 1024
-#define MAX_FLAC_BYTES (FLAC_BLOCK_SIZE*4 + 1024)
-#define ENCODE_BUFFER_SIZE	(max(MAX_FLAC_BYTES, SHINE_MAX_SAMPLES*2*2*2))
 #define TAIL_SIZE (2048*1024)
 
 #define RTP_SYNC 0x01
 #define NTP_SYNC 0x02
 
-#define RESEND_TO	200
+#define RESEND_TO	150
 
 #define	ICY_INTERVAL 16384
 #define ICY_LEN_MAX	 (255*16+1)
 
 enum { DATA, CONTROL, TIMING };
-static char *mime_types[] = { "audio/mpeg", "audio/flac", "audio/L16;rate=44100;channels=2", "audio/wav" };
 
 static struct wave_header_s {
 	uint8_t	chunk_id[4];
@@ -146,13 +144,29 @@ typedef struct raopst_s {
 	pthread_mutex_t ab_mutex;
 	pthread_t http_thread, rtp_thread;
 	struct {
-		char 		buffer[ENCODE_BUFFER_SIZE];
-		void 		*codec;
-		raopst_encode_t 	config;
-		int 		len;
-		bool 		header;
+		enum { CODEC_MP3 = 0, CODEC_AAC, CODEC_FLAC, CODEC_PCM, CODEC_WAV } format;
+		void *codec;
+		uint16_t* buffer;
+		uint8_t* data;
+		size_t count, bytes;
+		bool header;
+		union {
+			struct {
+				int bitrate;
+			} mp3;
+			struct {
+				int level;
+				size_t size;
+			} flac;
+			struct {
+				unsigned long in_samples, out_max_bytes;
+				int bitrate;
+			} aac;
+		};
 	} encode;
+	char* mimetype;
 	struct {
+		bool enabled;
 		size_t interval, remain;
 		bool  updated;
 	} icy;
@@ -180,28 +194,33 @@ static void*	rtp_thread_func(void *arg);
 static void*	http_thread_func(void *arg);
 static bool 	handle_http(raopst_t *ctx, int sock);
 static int	  	seq_order(seq_t a, seq_t b);
-static FLAC__StreamEncoderWriteStatus 	flac_write_callback(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], size_t bytes, unsigned samples, unsigned current_frame, void *client_data);
+static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], 
+														  size_t bytes, unsigned samples, unsigned current_frame, void *client_data);
 
 /*---------------------------------------------------------------------------*/
 static void flac_init(raopst_t *ctx) {
 	bool ok = true;
 	FLAC__StreamEncoder *codec;
 
-	ctx->encode.len = 0;
+	ctx->encode.bytes = 0;
 	ctx->encode.header = true;
 	ctx->encode.codec = FLAC__stream_encoder_new();
 	codec = (FLAC__StreamEncoder*) ctx->encode.codec;
 
-	LOG_INFO("[%p]: Using FLAC-%u (%p)", ctx, ctx->encode.config.flac.level, ctx->encode.codec);
+	LOG_INFO("[%p]: Using FLAC-%u (%p)", ctx, ctx->encode.flac.level, ctx->encode.codec);
 
 	ok &= FLAC__stream_encoder_set_verify(codec, false);
-	ok &= FLAC__stream_encoder_set_compression_level(codec, ctx->encode.config.flac.level);
+	ok &= FLAC__stream_encoder_set_compression_level(codec, ctx->encode.flac.level);
 	ok &= FLAC__stream_encoder_set_channels(codec, 2);
 	ok &= FLAC__stream_encoder_set_bits_per_sample(codec, 16);
 	ok &= FLAC__stream_encoder_set_sample_rate(codec, 44100);
 	ok &= FLAC__stream_encoder_set_blocksize(codec, FLAC_BLOCK_SIZE);
 	ok &= FLAC__stream_encoder_set_streamable_subset(codec, true);
 	ok &= !FLAC__stream_encoder_init_stream(codec, flac_write_callback, NULL, NULL, NULL, ctx);
+
+	ctx->encode.buffer = malloc(MAX_PACKET * 2);
+	ctx->encode.flac.size = FLAC_BLOCK_SIZE * sizeof(FLAC__int32) + 1024;
+	ctx->encode.data = malloc(ctx->encode.flac.size);
 
 	if (!ok) {
 		LOG_ERROR("{%p]: Cannot set FLAC parameters", ctx);
@@ -212,12 +231,14 @@ static void flac_init(raopst_t *ctx) {
 static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], size_t bytes, unsigned samples, unsigned current_frame, void *client_data) {
 	raopst_t *ctx = (raopst_t*) client_data;
 
-	if (ctx->encode.len + bytes <= MAX_FLAC_BYTES) {
-		memcpy(ctx->encode.buffer + ctx->encode.len, buffer, bytes);
-		ctx->encode.len += bytes;
-	} else {
-		LOG_WARN("[%p]: flac coded buffer too big %u", ctx, bytes);
+	if (ctx->encode.bytes + bytes > ctx->encode.flac.size) {
+		ctx->encode.flac.size = ctx->encode.bytes + bytes + 1024;
+		ctx->encode.data = realloc(ctx->encode.data, ctx->encode.flac.size);
+		ctx->encode.bytes += bytes;
+		LOG_WARN("[%p]: increasing flac output buffer %u", ctx, ctx->encode.flac.size);
 	}
+
+	memcpy(ctx->encode.data + ctx->encode.bytes, buffer, bytes);
 
 	return FLAC__STREAM_ENCODER_WRITE_STATUS_OK;
 }
@@ -226,31 +247,57 @@ static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEnco
 static void mp3_init(raopst_t *ctx) {
 	shine_config_t config;
 
-	ctx->encode.len = 0;
-
 	shine_set_config_mpeg_defaults(&config.mpeg);
 	config.wave.samplerate = 44100;
 	config.wave.channels = 2;
-	config.mpeg.bitr = ctx->encode.config.mp3.bitrate ? ctx->encode.config.mp3.bitrate : 128;
+	config.mpeg.bitr = ctx->encode.mp3.bitrate;
 	config.mpeg.mode = STEREO;
 
 	ctx->encode.codec = shine_initialise(&config);
-	LOG_INFO("[%p]: Using shine MP3-%u (%p)", ctx, ctx->encode.config.mp3.bitrate, ctx->encode.codec);
+
+	// we should not have more than 2 blocks to buffer and the result is much less than 
+	ctx->encode.buffer = malloc(SHINE_MAX_SAMPLES * 2 * 2);
+	ctx->encode.data = malloc(SHINE_MAX_SAMPLES * 2 * 2);
+
+	LOG_INFO("[%p]: Using shine MP3-%u (%p)", ctx, ctx->encode.mp3.bitrate, ctx->encode.codec);
+}
+
+/*---------------------------------------------------------------------------*/
+static void aac_init(raopst_t* ctx) {
+	ctx->encode.codec = (void*)faacEncOpen(44100, 2, &ctx->encode.aac.in_samples, &ctx->encode.aac.out_max_bytes);
+	ctx->encode.buffer = malloc(ctx->encode.aac.in_samples * 2 * 2);
+	ctx->encode.data = malloc(ctx->encode.aac.out_max_bytes);
+
+	faacEncConfigurationPtr format = faacEncGetCurrentConfiguration(ctx->encode.codec);
+	format->bitRate = ctx->encode.aac.bitrate * 1000 / 2;
+	format->mpegVersion = MPEG4;
+	format->bandWidth = 0;
+	format->outputFormat = ADTS_STREAM;
+	format->inputFormat = FAAC_INPUT_16BIT;
+	faacEncSetConfiguration(ctx->encode.codec, format);
+
+	LOG_INFO("[%p]: Using AAC-%u (%p)", ctx, ctx->encode.aac.bitrate, ctx->encode.codec);
 }
 
 /*---------------------------------------------------------------------------*/
 static void encoder_close(raopst_t *ctx) {
 	if (!ctx->encode.codec) return;
 
-	if (ctx->encode.config.codec == CODEC_FLAC) {
+	// should use pointer to methods one day...
+	if (ctx->encode.format == CODEC_FLAC) {
 		FLAC__stream_encoder_finish(ctx->encode.codec);
 		FLAC__stream_encoder_delete(ctx->encode.codec);
-	} else if (ctx->encode.config.codec == CODEC_MP3) {
+	} else if (ctx->encode.format == CODEC_MP3) {
 		int len;
 		shine_flush(ctx->encode.codec, &len);
 		shine_close(ctx->encode.codec);
+	} else if (ctx->encode.format == CODEC_AAC) {
+		faacEncEncode(ctx->encode.codec, NULL, 0, ctx->encode.data, ctx->encode.aac.out_max_bytes);
+		faacEncClose(ctx->encode.codec);
 	}
 
+	if (ctx->encode.buffer) free(ctx->encode.buffer);
+	if (ctx->encode.data) free(ctx->encode.data);
 	ctx->encode.codec = NULL;
 }
 
@@ -287,15 +334,14 @@ static alac_file* alac_init(int fmtp[32]) {
 }
 
 /*---------------------------------------------------------------------------*/
-raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encode_t codec,
+raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec, bool metadata,
 								bool sync, bool drift, bool range, char *latencies,
 								char *aeskey, char *aesiv, char *fmtpstr,
 								short unsigned pCtrlPort, short unsigned pTimingPort,
 								void *owner,
 								raopst_cb_t event_cb, raop_http_cb_t http_cb,
 								unsigned short port_base, unsigned short port_range,
-								int http_length)
-{
+								int http_length) {
 	char *arg, *p;
 	int fmtp[12];
 	bool rc = true;
@@ -308,7 +354,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 	port.offset = rand() % port_range;
 
 	if (!ctx) return resp;
-
+	
 	ctx->http_tail = malloc(TAIL_SIZE);
 	if (!ctx->http_tail) {
 		free(ctx);
@@ -321,8 +367,39 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, raopst_encod
 	ctx->rtp_host.sin_addr.s_addr = INADDR_ANY;
 	pthread_mutex_init(&ctx->ab_mutex, 0);
 	ctx->flush_seqno = -1;
-	ctx->encode.config = codec;
-	ctx->encode.header = false;
+
+	/* this is done by calloc 
+	ctx->encode.buffer = NULL;
+	ctx->encode.data = NULL;
+	ctx->icy.enabled = false;
+	ctx->encode.header = false; 
+	*/
+
+	if (!strcasecmp(codec, "pcm")) {
+		ctx->encode.format = CODEC_PCM;
+		ctx->mimetype = "audio/L16;rate=44100;channels=2";
+	} else if (!strcasecmp(codec, "wav")) {
+		ctx->encode.format = CODEC_WAV;
+		ctx->mimetype = "audio/wav";
+	} else if (strcasestr(codec, "mp3")) {
+		ctx->encode.format = CODEC_MP3;
+		ctx->mimetype = "audio/mpeg";
+		ctx->encode.mp3.bitrate = 192;
+		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.mp3.bitrate) && ctx->encode.mp3.bitrate > 320) ctx->encode.mp3.bitrate = 320;
+		ctx->icy.enabled = metadata;
+	} else if (strcasestr(codec, "aac")) {
+		ctx->encode.format = CODEC_AAC;
+		ctx->mimetype = "audio/aac";
+		ctx->encode.aac.bitrate = 128;
+		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.aac.bitrate) && ctx->encode.aac.bitrate > 320) ctx->encode.aac.bitrate = 320;
+		ctx->icy.enabled = metadata;
+	} else {
+		ctx->encode.format = CODEC_FLAC;
+		ctx->mimetype = "audio/flac";
+		ctx->encode.flac.level = 5;
+		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.flac.level) && ctx->encode.flac.level > 9) ctx->encode.flac.level = 320;
+	}
+	
 	ctx->latency = atoi(latencies);
 	ctx->latency = (ctx->latency * 44100) / 1000;
 	if (strstr(latencies, ":f")) ctx->http_fill = true;
@@ -420,10 +497,7 @@ void raopst_metadata(struct raopst_s *ctx, raopsr_metadata_t *metadata) {
 }
 
 /*---------------------------------------------------------------------------*/
-void raopst_end(raopst_t *ctx)
-{
-	int i;
-
+void raopst_end(raopst_t *ctx) {
 	if (!ctx) return;
 
 	if (ctx->running) {
@@ -433,14 +507,14 @@ void raopst_end(raopst_t *ctx)
 	}
 
 	shutdown_socket(ctx->http_listener);
-	for (i = 0; i < 3; i++) if (ctx->rtp_sockets[i].sock > 0) closesocket(ctx->rtp_sockets[i].sock);
+	for (int i = 0; i < 3; i++) if (ctx->rtp_sockets[i].sock > 0) closesocket(ctx->rtp_sockets[i].sock);
 
 	delete_alac(ctx->alac_codec);
 	if (ctx->encode.codec) {
-		if (ctx->encode.config.codec == CODEC_FLAC) {
+		if (ctx->encode.format == CODEC_FLAC) {
 			FLAC__stream_encoder_finish(ctx->encode.codec);
 			FLAC__stream_encoder_delete(ctx->encode.codec);
-		} else if (ctx->encode.config.codec == CODEC_MP3) {
+		} else if (ctx->encode.format == CODEC_MP3) {
 			shine_close(ctx->encode.codec);
 		}
 	}
@@ -449,6 +523,8 @@ void raopst_end(raopst_t *ctx)
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
 	free(ctx->http_tail);
+	if (ctx->encode.buffer) free(ctx->encode.buffer);
+	if (ctx->encode.data) free(ctx->encode.data);
 	raopsr_metadata_free(&ctx->metadata);
 	free(ctx);
 
@@ -460,8 +536,7 @@ void raopst_end(raopst_t *ctx)
 }
 
 /*---------------------------------------------------------------------------*/
-bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, bool exit_locked, bool silence)
-{
+bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, bool exit_locked, bool silence) {
 	bool rc = true;
 	uint32_t now = gettime_ms();
 
@@ -562,14 +637,17 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 			ctx->ab_read = seqno;
 			ctx->skip = 0;
 			ctx->flush_seqno = -1;
-			ctx->playing = true;
-			ctx->silence = true;
+			ctx->playing = ctx->silence = true;
 			ctx->synchro.first = false;
 			ctx->resent_frames = ctx->silent_frames = 0;
-			ctx->http_count = 0;
-			if (ctx->encode.config.codec == CODEC_FLAC) flac_init(ctx);
-			else if (ctx->encode.config.codec == CODEC_MP3) mp3_init(ctx);
-			else if (ctx->encode.config.codec == CODEC_WAV) ctx->encode.header = true;
+			ctx->http_count = ctx->encode.bytes = ctx->encode.count = 0;
+			if (ctx->encode.format == CODEC_FLAC) flac_init(ctx);
+			else if (ctx->encode.format == CODEC_MP3) mp3_init(ctx);
+			else if (ctx->encode.format == CODEC_AAC) aac_init(ctx);
+			else if (ctx->encode.format == CODEC_WAV) {
+				ctx->encode.header = true;
+				ctx->encode.data = malloc(MAX_PACKET * 2 + sizeof(wave_header));
+			}
 		} else {
 			pthread_mutex_unlock(&ctx->ab_mutex);
 			return;
@@ -738,7 +816,6 @@ static void *rtp_thread_func(void *arg) {
 				}
 
 				buffer_put_packet(ctx, seqno, rtptime, packet[1] & 0x80, pktp, plen);
-
 				break;
 			}
 
@@ -783,7 +860,6 @@ static void *rtp_thread_func(void *arg) {
 					rtp_request_timing(ctx);
 					count = 3;
 				}
-
 				break;
 			}
 
@@ -860,7 +936,6 @@ static void *rtp_thread_func(void *arg) {
 
 				LOG_DEBUG("[%p]: Timing references local:%" PRIu64 ", remote: %" PRIx64 " (delta : %" PRId64 ", sum : %" PRId64 ", adjust : %" PRId64 ", gaps : % d)",
 						  ctx, ctx->timing.local, ctx->timing.remote, delta, ctx->timing.gap_sum, ctx->timing.gap_adjust, ctx->timing.gap_count);
-
 				break;
 			}
 		}
@@ -1054,16 +1129,10 @@ int send_data(bool chunked, int sock, void *data, int len, int flags) {
 
 /*---------------------------------------------------------------------------*/
 static void *http_thread_func(void *arg) {
-	int16_t *inbuf;
 	int frame_count = 0;
-	FLAC__int32 *flac_samples = NULL;
 	raopst_t *ctx = (raopst_t*) arg;
 	int sock = -1;
 	struct timeval timeout = { 0, 0 };
-
-	if (ctx->encode.config.codec == CODEC_FLAC && ((flac_samples = malloc(2 * ctx->frame_size * sizeof(FLAC__int32))) == NULL)) {
-		LOG_ERROR("[%p]: Cannot allocate FLAC sample buffer %u", ctx, ctx->frame_size);
-	}
 
 	while (ctx->running) {
 		ssize_t sent;
@@ -1121,57 +1190,65 @@ static void *http_thread_func(void *arg) {
 			ctx->http_ready = false;
 		}
 
+		uint16_t* pcm;
+		size_t bytes;
+
 		// wait for session to be ready before sending (no need for mutex)
-		if (ctx->http_ready && (inbuf = _buffer_get_frame(ctx, &size)) != NULL) {
-			int len;
+		if (ctx->http_ready && (pcm = _buffer_get_frame(ctx, &bytes)) != NULL) {
+			uint8_t* data = ctx->encode.data;
 
-			if (ctx->encode.config.codec == CODEC_FLAC) {
-				// send streaminfo at beginning
-				if (ctx->encode.header && ctx->encode.len) {
-#ifdef __RTP_STORE
-					fwrite(ctx->encode.buffer, ctx->encode.len, 1, ctx->httpOUT);
-#endif
-					memcpy(ctx->http_tail, ctx->encode.buffer, ctx->encode.len);
-					ctx->http_count = ctx->encode.len;
+			if (ctx->encode.format == CODEC_FLAC) {
+				for (size_t i = 0; i < bytes / 2; i++) ((FLAC__int32*)ctx->encode.buffer)[i] = pcm[i];
+				FLAC__stream_encoder_process_interleaved(ctx->encode.codec, (FLAC__int32*) ctx->encode.buffer, bytes / 4);
 
-					// should be fast enough and can't release mutex anyway
-					send_data(ctx->http_length == -3, sock, (void*) ctx->encode.buffer, ctx->encode.len, 0);
-					ctx->encode.len = 0;
-					ctx->encode.header = false;
+				// callback has filled encoded data 
+				bytes = ctx->encode.bytes;
+				ctx->encode.bytes = 0;
+			} else if (ctx->encode.format == CODEC_MP3) {
+				size_t block_size = shine_samples_per_pass(ctx->encode.codec);
+				memcpy(ctx->encode.buffer + ctx->encode.count, pcm, bytes);
+				ctx->encode.count += bytes / 4;
+				bytes = 0;
+				// encode all full block to not accumulate pcm
+				while (ctx->encode.count >= block_size) {
+					int written;
+					uint8_t* encoded = shine_encode_buffer_interleaved(ctx->encode.codec, ctx->encode.buffer, &written);
+
+					bytes += written;
+					ctx->encode.count -= block_size;
+
+					memcpy(ctx->encode.data + bytes, encoded, written);
+					memcpy(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
 				}
-
-				// now send body
-				for (len = 0; len < 2*size/4; len++) flac_samples[len] = inbuf[len];
-				FLAC__stream_encoder_process_interleaved(ctx->encode.codec, flac_samples, size/4);
-				inbuf = (void*) ctx->encode.buffer;
-				len = ctx->encode.len;
-				ctx->encode.len = 0;
-			} else if (ctx->encode.config.codec == CODEC_MP3) {
-				int block = shine_samples_per_pass(ctx->encode.codec) * 4;
-				memcpy(ctx->encode.buffer + ctx->encode.len, inbuf, size);
-				ctx->encode.len += size;
-				if (ctx->encode.len >= block) {
-					inbuf = (int16_t*) shine_encode_buffer_interleaved(ctx->encode.codec, (int16_t*) ctx->encode.buffer, &len);
-					ctx->encode.len -= block;
-					memcpy(ctx->encode.buffer, ctx->encode.buffer + block, ctx->encode.len);
-				} else len = 0;
+			} else if (ctx->encode.format == CODEC_AAC) {
+				memcpy(ctx->encode.buffer + ctx->encode.count, pcm, bytes);
+				ctx->encode.count += bytes / (2 * 2);
+				bytes = 0;
+				// encode all full block to not accumulate pcm
+				while (ctx->encode.count >= ctx->encode.aac.in_samples / 2) {
+					bytes += faacEncEncode(ctx->encode.codec, (int32_t*)ctx->encode.buffer, ctx->encode.aac.in_samples, 
+											  ctx->encode.data + bytes, ctx->encode.aac.out_max_bytes);
+					ctx->encode.count -= ctx->encode.aac.in_samples / 2;
+					// we could just update the encode.buffer starting point but at least one last memcpy will be needed
+					memcpy(ctx->encode.buffer, ctx->encode.buffer + ctx->encode.aac.in_samples, ctx->encode.count * 4);
+				}
 			} else {
-				if (ctx->encode.config.codec == CODEC_PCM) {
-					int16_t *p = inbuf;
-					for (len = size*2/4; len > 0; len--,p++) *p = (uint8_t) *p << 8 | (uint8_t) (*p >> 8);
-				} else if (ctx->encode.header) {
-#ifdef __RTP_STORE
-					fwrite(&wave_header, sizeof(wave_header), 1, ctx->httpOUT);
+				if (ctx->encode.format == CODEC_PCM) {
+#if WIN
+					for (int i = 0; i < bytes / 2; i++) data[i] = _byteswap_ushort(data[i]);									
+#else
+					for (int i = 0; i < bytes / 2; i++) data[i] = __builtin_bswap16(data[i]);
 #endif
-					ctx->http_count = sizeof(wave_header);
-					memcpy(ctx->http_tail, &wave_header, sizeof(wave_header));
-					send_data(ctx->http_length == -3, sock, (void*) &wave_header, sizeof(wave_header), 0);
+				} else if (ctx->encode.header) {
+					memcpy(ctx->encode.data, &wave_header, sizeof(wave_header));
+					memcpy(ctx->encode.data + sizeof(wave_header), data, bytes);
+
+					bytes += sizeof(wave_header);
 					ctx->encode.header = false;
 				}
-				len = size;
 			}
 
-			if (len) {
+			if (bytes) {
 				uint32_t space, gap = gettime_ms();
 				int offset;
 
@@ -1179,13 +1256,13 @@ static void *http_thread_func(void *arg) {
 				fwrite(inbuf, len, 1, ctx->httpOUT);
 #endif
 				// store data for a potential re-send
-				space = min(len, TAIL_SIZE - ctx->http_count % TAIL_SIZE);
-				memcpy(ctx->http_tail + (ctx->http_count % TAIL_SIZE), inbuf, space);
-				memcpy(ctx->http_tail, inbuf + space, len - space);
-				ctx->http_count += len;
+				space = min(bytes, TAIL_SIZE - ctx->http_count % TAIL_SIZE);
+				memcpy(ctx->http_tail + (ctx->http_count % TAIL_SIZE), data, space);
+				memcpy(ctx->http_tail, data + space, bytes - space);
+				ctx->http_count += bytes;
 
 				// check if ICY sending is active (len < ICY_INTERVAL)
-				if (ctx->icy.interval && len > ctx->icy.remain) {
+				if (ctx->icy.interval && bytes > ctx->icy.remain) {
 					int len_16 = 0;
 					char buffer[ICY_LEN_MAX];
 
@@ -1211,8 +1288,8 @@ static void *http_thread_func(void *arg) {
 
 					// send remaining data first
 					offset = ctx->icy.remain;
-					if (offset) send_data(ctx->http_length == -3, sock, (void*) inbuf, offset, 0);
-					len -= offset;
+					if (offset) send_data(ctx->http_length == -3, sock, data, offset, 0);
+					bytes -= offset;
 
 					// then send icy data
 					send_data(ctx->http_length == -3, sock, (void*) buffer, len_16 * 16 + 1, 0);
@@ -1224,20 +1301,20 @@ static void *http_thread_func(void *arg) {
 					pthread_mutex_unlock(&ctx->ab_mutex);
 				}
 
-				LOG_SDEBUG("[%p]: HTTP sent frame count:%u bytes:%u (W:%hu R:%hu)", ctx, frame_count++, len+offset, ctx->ab_write, ctx->ab_read);
-				sent = send_data(ctx->http_length == -3, sock, (uint8_t*) inbuf + offset , len, 0);
+				LOG_SDEBUG("[%p]: HTTP sent frame count:%u bytes:%u (W:%hu R:%hu)", ctx, frame_count++, bytes + offset, ctx->ab_write, ctx->ab_read);
+				sent = send_data(ctx->http_length == -3, sock, data + offset , bytes, 0);
 
 				// update remaining count with desired length
-				if (ctx->icy.interval) ctx->icy.remain -= len;
+				if (ctx->icy.interval) ctx->icy.remain -= bytes;
 
 				gap = gettime_ms() - gap;
 
 				if (gap > 50) {
-					LOG_ERROR("[%p]: spent %u ms in send for %u bytes (sent %zd)!", ctx, gap, len, sent);
+					LOG_ERROR("[%p]: spent %u ms in send for %u bytes (sent %zd)!", ctx, gap, bytes, sent);
 				}
 
-				if (sent != len) {
-					LOG_WARN("[%p]: HTTP send() unexpected response: %li (data=%i): %s", ctx, (long int) sent, len, strerror(errno));
+				if (sent != bytes) {
+					LOG_WARN("[%p]: HTTP send() unexpected response: %li (data=%i): %s", ctx, (long int) sent, bytes, strerror(errno));
 				}
 			} else pthread_mutex_unlock(&ctx->ab_mutex);
 
@@ -1252,16 +1329,12 @@ static void *http_thread_func(void *arg) {
 
 	if (sock != -1) shutdown_socket(sock);
 
-	if (ctx->encode.config.codec == CODEC_FLAC && flac_samples) free(flac_samples);
-
 	LOG_INFO("[%p]: terminating", ctx);
-
 	return NULL;
 }
 
 /*----------------------------------------------------------------------------*/
-static bool handle_http(raopst_t *ctx, int sock)
-{
+static bool handle_http(raopst_t *ctx, int sock) {
 	char *body = NULL, method[16] = "", proto[16] = "", *str, *head = NULL;
 	key_data_t headers[64], resp[16] = { { NULL, NULL } };
 	size_t offset = 0;
@@ -1278,7 +1351,7 @@ static bool handle_http(raopst_t *ctx, int sock)
 	}
 
 	kd_add(resp, "Server", "HairTunes");
-	kd_add(resp, "Content-Type", mime_types[ctx->encode.config.codec]);
+	kd_add(resp, "Content-Type", ctx->mimetype);
 
 	// is there a range request (chromecast non-compliance to HTTP !!!)
 	if (ctx->range && ((str = kd_lookup(headers, "Range")) != NULL)) {
@@ -1298,15 +1371,13 @@ static bool handle_http(raopst_t *ctx, int sock)
 	}
 
 	// check if add ICY metadata is needed (only on live stream)
-	if (ctx->encode.config.codec == CODEC_MP3 && ctx->encode.config.mp3.icy &&
-		((str = kd_lookup(headers, "Icy-MetaData")) != NULL) && atoi(str)) {
+	if (ctx->icy.enabled &&	((str = kd_lookup(headers, "Icy-MetaData")) != NULL) && atoi(str)) {
 		kd_vadd(resp, "icy-metaint", "%u", ICY_INTERVAL);
 		ctx->icy.interval = ctx->icy.remain = ICY_INTERVAL;
 	} else ctx->icy.interval = 0;
 
 	// let owner modify HTTP response if needed
 	if (ctx->http_cb) ctx->http_cb(ctx->owner, headers, resp);
-
 
 	if (ctx->http_length == -3 && HTTP_11) {
 		char *value = kd_lookup(headers, "Connection");
