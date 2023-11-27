@@ -510,21 +510,12 @@ void raopst_end(raopst_t *ctx) {
 	for (int i = 0; i < 3; i++) if (ctx->rtp_sockets[i].sock > 0) closesocket(ctx->rtp_sockets[i].sock);
 
 	delete_alac(ctx->alac_codec);
-	if (ctx->encode.codec) {
-		if (ctx->encode.format == CODEC_FLAC) {
-			FLAC__stream_encoder_finish(ctx->encode.codec);
-			FLAC__stream_encoder_delete(ctx->encode.codec);
-		} else if (ctx->encode.format == CODEC_MP3) {
-			shine_close(ctx->encode.codec);
-		}
-	}
+	encoder_close(ctx);
 
 	pthread_mutex_destroy(&ctx->ab_mutex);
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
 	free(ctx->http_tail);
-	if (ctx->encode.buffer) free(ctx->encode.buffer);
-	if (ctx->encode.data) free(ctx->encode.data);
 	raopsr_metadata_free(&ctx->metadata);
 	free(ctx);
 
@@ -1206,7 +1197,7 @@ static void *http_thread_func(void *arg) {
 				ctx->encode.bytes = 0;
 			} else if (ctx->encode.format == CODEC_MP3) {
 				size_t block_size = shine_samples_per_pass(ctx->encode.codec);
-				memcpy(ctx->encode.buffer + ctx->encode.count, pcm, bytes);
+				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
 				ctx->encode.count += bytes / 4;
 				bytes = 0;
 				// encode all full block to not accumulate pcm
@@ -1221,8 +1212,8 @@ static void *http_thread_func(void *arg) {
 					memcpy(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
 				}
 			} else if (ctx->encode.format == CODEC_AAC) {
-				memcpy(ctx->encode.buffer + ctx->encode.count, pcm, bytes);
-				ctx->encode.count += bytes / (2 * 2);
+				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
+				ctx->encode.count += bytes / 4;
 				bytes = 0;
 				// encode all full block to not accumulate pcm
 				while (ctx->encode.count >= ctx->encode.aac.in_samples / 2) {
