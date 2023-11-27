@@ -202,8 +202,6 @@ static void flac_init(raopst_t *ctx) {
 	bool ok = true;
 	FLAC__StreamEncoder *codec;
 
-	ctx->encode.bytes = 0;
-	ctx->encode.header = true;
 	ctx->encode.codec = FLAC__stream_encoder_new();
 	codec = (FLAC__StreamEncoder*) ctx->encode.codec;
 
@@ -219,7 +217,7 @@ static void flac_init(raopst_t *ctx) {
 	ok &= !FLAC__stream_encoder_init_stream(codec, flac_write_callback, NULL, NULL, NULL, ctx);
 
 	ctx->encode.buffer = malloc(MAX_PACKET * 2);
-	ctx->encode.flac.size = FLAC_BLOCK_SIZE * sizeof(FLAC__int32) + 1024;
+	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 2 + 1024;
 	ctx->encode.data = malloc(ctx->encode.flac.size);
 
 	if (!ok) {
@@ -234,11 +232,11 @@ static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEnco
 	if (ctx->encode.bytes + bytes > ctx->encode.flac.size) {
 		ctx->encode.flac.size = ctx->encode.bytes + bytes + 1024;
 		ctx->encode.data = realloc(ctx->encode.data, ctx->encode.flac.size);
-		ctx->encode.bytes += bytes;
 		LOG_WARN("[%p]: increasing flac output buffer %u", ctx, ctx->encode.flac.size);
 	}
 
 	memcpy(ctx->encode.data + ctx->encode.bytes, buffer, bytes);
+	ctx->encode.bytes += bytes;
 
 	return FLAC__STREAM_ENCODER_WRITE_STATUS_OK;
 }
@@ -256,8 +254,8 @@ static void mp3_init(raopst_t *ctx) {
 	ctx->encode.codec = shine_initialise(&config);
 
 	// we should not have more than 2 blocks to buffer and the result is much less than 
-	ctx->encode.buffer = malloc(SHINE_MAX_SAMPLES * 2 * 2);
-	ctx->encode.data = malloc(SHINE_MAX_SAMPLES * 2 * 2);
+	ctx->encode.buffer = malloc(SHINE_MAX_SAMPLES * 4 * 2);
+	ctx->encode.data = malloc(SHINE_MAX_SAMPLES * 4 * 2);
 
 	LOG_INFO("[%p]: Using shine MP3-%u (%p)", ctx, ctx->encode.mp3.bitrate, ctx->encode.codec);
 }
@@ -1208,7 +1206,7 @@ static void *http_thread_func(void *arg) {
 
 					bytes += written;
 					ctx->encode.count -= block_size;
-					memcpy(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
+					memmove(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
 				}
 			} else if (ctx->encode.format == CODEC_AAC) {
 				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
@@ -1220,7 +1218,7 @@ static void *http_thread_func(void *arg) {
 											  ctx->encode.data + bytes, ctx->encode.aac.out_max_bytes);
 					ctx->encode.count -= ctx->encode.aac.in_samples / 2;
 					// we could just update the encode.buffer starting point but at least one last memcpy will be needed
-					memcpy(ctx->encode.buffer, ctx->encode.buffer + ctx->encode.aac.in_samples, ctx->encode.count * 4);
+					memmove(ctx->encode.buffer, ctx->encode.buffer + ctx->encode.aac.in_samples, ctx->encode.count * 4);
 				}
 			} else {
 				if (ctx->encode.format == CODEC_PCM) {
