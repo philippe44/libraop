@@ -205,6 +205,10 @@ static void flac_init(raopst_t *ctx) {
 	ctx->encode.codec = FLAC__stream_encoder_new();
 	codec = (FLAC__StreamEncoder*) ctx->encode.codec;
 
+	ctx->encode.buffer = malloc(MAX_PACKET * 2);
+	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 2 + 1024;
+	ctx->encode.data = malloc(ctx->encode.flac.size);
+
 	LOG_INFO("[%p]: Using FLAC-%u (%p)", ctx, ctx->encode.flac.level, ctx->encode.codec);
 
 	ok &= FLAC__stream_encoder_set_verify(codec, false);
@@ -215,10 +219,6 @@ static void flac_init(raopst_t *ctx) {
 	ok &= FLAC__stream_encoder_set_blocksize(codec, FLAC_BLOCK_SIZE);
 	ok &= FLAC__stream_encoder_set_streamable_subset(codec, true);
 	ok &= !FLAC__stream_encoder_init_stream(codec, flac_write_callback, NULL, NULL, NULL, ctx);
-
-	ctx->encode.buffer = malloc(MAX_PACKET * 2);
-	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 2 + 1024;
-	ctx->encode.data = malloc(ctx->encode.flac.size);
 
 	if (!ok) {
 		LOG_ERROR("{%p]: Cannot set FLAC parameters", ctx);
@@ -234,7 +234,7 @@ static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEnco
 		ctx->encode.data = realloc(ctx->encode.data, ctx->encode.flac.size);
 		LOG_WARN("[%p]: increasing flac output buffer %u", ctx, ctx->encode.flac.size);
 	}
-
+	LOG_INFO("CALLBACK IS %d %d", ctx->encode.bytes, bytes);
 	memcpy(ctx->encode.data + ctx->encode.bytes, buffer, bytes);
 	ctx->encode.bytes += bytes;
 
@@ -1191,6 +1191,7 @@ static void *http_thread_func(void *arg) {
 				FLAC__stream_encoder_process_interleaved(ctx->encode.codec, (FLAC__int32*) ctx->encode.buffer, bytes / 4);
 
 				// callback has filled encoded data 
+				//LOG_INFO("WRITING %d %d", ctx->encode.bytes, bytes);
 				bytes = ctx->encode.bytes;
 				ctx->encode.bytes = 0;
 			} else if (ctx->encode.format == CODEC_MP3) {
