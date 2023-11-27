@@ -1204,11 +1204,10 @@ static void *http_thread_func(void *arg) {
 				while (ctx->encode.count >= block_size) {
 					int written;
 					uint8_t* encoded = shine_encode_buffer_interleaved(ctx->encode.codec, ctx->encode.buffer, &written);
+					memcpy(ctx->encode.data + bytes, encoded, written);
 
 					bytes += written;
 					ctx->encode.count -= block_size;
-
-					memcpy(ctx->encode.data + bytes, encoded, written);
 					memcpy(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
 				}
 			} else if (ctx->encode.format == CODEC_AAC) {
