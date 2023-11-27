@@ -38,7 +38,8 @@ INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
 	  -I$(DMAP_PARSER) \
 	  -I$(MDNS)/include/mdnssvc -I$(MDNS)/include/mdnssd \
 	  -I$(OPENSSL)/include \
-	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac -I$(CODECS)/include/shine \
+	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac \
+	  -I$(CODECS)/include/shine -I$(CODECS)/include/faac \
 	  -I$(SRC) -I$(SRC)/inc
 		  
 CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\

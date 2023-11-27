@@ -46,8 +46,8 @@ static log_level 	*loglevel = &raop_loglevel;
 // default buffer size
 #define BUFFER_FRAMES 2048
 #define MAX_PACKET    2048
-#define FLAC_BLOCK_SIZE 1024
-#define TAIL_SIZE (2048*1024)
+#define FLAC_BLOCK_SIZE	4096
+#define CACHE_SIZE (2048*1024)
 
 #define RTP_SYNC 0x01
 #define NTP_SYNC 0x02
@@ -146,7 +146,7 @@ typedef struct raopst_s {
 	struct {
 		enum { CODEC_MP3 = 0, CODEC_AAC, CODEC_FLAC, CODEC_PCM, CODEC_WAV } format;
 		void *codec;
-		uint16_t* buffer;
+		int16_t* buffer;
 		uint8_t* data;
 		size_t count, bytes;
 		bool header;
@@ -178,7 +178,7 @@ typedef struct raopst_s {
 	raopst_cb_t event_cb;
 	raop_http_cb_t http_cb;
 	void *owner;
-	char *http_tail;
+	uint8_t *http_cache;
 	size_t http_count;
 	int http_length;
 } raopst_t;
@@ -200,15 +200,13 @@ static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEnco
 /*---------------------------------------------------------------------------*/
 static void flac_init(raopst_t *ctx) {
 	bool ok = true;
-	FLAC__StreamEncoder *codec;
+	FLAC__StreamEncoder *codec = FLAC__stream_encoder_new();
 
-	ctx->encode.codec = FLAC__stream_encoder_new();
-	codec = (FLAC__StreamEncoder*) ctx->encode.codec;
-
-	ctx->encode.buffer = malloc(MAX_PACKET * 2);
-	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 2 + 1024;
+	ctx->encode.codec = codec;
+	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 4 + 1024;
 	ctx->encode.data = malloc(ctx->encode.flac.size);
-
+	ctx->encode.buffer = malloc(MAX_PACKET * sizeof(FLAC__int32) * 2);
+	
 	LOG_INFO("[%p]: Using FLAC-%u (%p)", ctx, ctx->encode.flac.level, ctx->encode.codec);
 
 	ok &= FLAC__stream_encoder_set_verify(codec, false);
@@ -234,7 +232,7 @@ static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEnco
 		ctx->encode.data = realloc(ctx->encode.data, ctx->encode.flac.size);
 		LOG_WARN("[%p]: increasing flac output buffer %u", ctx, ctx->encode.flac.size);
 	}
-	LOG_INFO("CALLBACK IS %d %d", ctx->encode.bytes, bytes);
+
 	memcpy(ctx->encode.data + ctx->encode.bytes, buffer, bytes);
 	ctx->encode.bytes += bytes;
 
@@ -353,11 +351,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 
 	if (!ctx) return resp;
 	
-	ctx->http_tail = malloc(TAIL_SIZE);
-	if (!ctx->http_tail) {
-		free(ctx);
-		return resp;
-	}
+	ctx->http_cache = malloc(CACHE_SIZE);
 	ctx->http_length = http_length;
 	ctx->host = host;
 	ctx->peer = peer;
@@ -513,7 +507,7 @@ void raopst_end(raopst_t *ctx) {
 	pthread_mutex_destroy(&ctx->ab_mutex);
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
-	free(ctx->http_tail);
+	free(ctx->http_cache);
 	raopsr_metadata_free(&ctx->metadata);
 	free(ctx);
 
@@ -997,13 +991,13 @@ static bool rtp_request_resend(raopst_t *ctx, seq_t first, seq_t last) {
 
 /*---------------------------------------------------------------------------*/
 // get the next frame, when available. return 0 if underrun/stream reset.
-static short *_buffer_get_frame(raopst_t *ctx, int *len) {
+static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 	// no frame (even silence) when not playing and not synchronized
 	if (!ctx->playing || ctx->synchro.status != (RTP_SYNC | NTP_SYNC)) return NULL;
 
 	// send silence if required to create enough buffering (want countdown to happen)
 	if ((ctx->silence_count && ctx->silence_count--) || ctx->pause)	{
-		*len = ctx->frame_size * 4;
+		*bytes = ctx->frame_size * 4;
 		return (short*) ctx->silence_frame;
 	}
 
@@ -1073,9 +1067,9 @@ static short *_buffer_get_frame(raopst_t *ctx, int *len) {
 	if (!curframe->ready) {
 		LOG_DEBUG("[%p]: created zero frame at %d (W:%hu R:%hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
 		memset(curframe->data, 0, ctx->frame_size * 4);
-		*len = ctx->frame_size * 4;
+		*bytes = ctx->frame_size * 4;
 	} else {
-		*len = curframe->len;
+		*bytes = curframe->len;
 		curframe->ready = 0;
 	}
 
@@ -1124,11 +1118,7 @@ static void *http_thread_func(void *arg) {
 	struct timeval timeout = { 0, 0 };
 
 	while (ctx->running) {
-		ssize_t sent;
 		fd_set rfds;
-		int n;
-		bool res = true;
-		int size = 0;
 
 		if (sock == -1) {
 			struct timeval timeout = {0, 50*1000};
@@ -1162,7 +1152,8 @@ static void *http_thread_func(void *arg) {
 		FD_ZERO(&rfds);
 		FD_SET(sock, &rfds);
 
-		n = select(sock + 1, &rfds, NULL, NULL, &timeout);
+		int n = select(sock + 1, &rfds, NULL, NULL, &timeout);
+		bool res = true;
 
 		pthread_mutex_lock(&ctx->ab_mutex);
 
@@ -1179,7 +1170,7 @@ static void *http_thread_func(void *arg) {
 			ctx->http_ready = false;
 		}
 
-		uint16_t* pcm;
+		int16_t* pcm;
 		size_t bytes;
 
 		// wait for session to be ready before sending (no need for mutex)
@@ -1190,15 +1181,16 @@ static void *http_thread_func(void *arg) {
 				for (size_t i = 0; i < bytes / 2; i++) ((FLAC__int32*)ctx->encode.buffer)[i] = pcm[i];
 				FLAC__stream_encoder_process_interleaved(ctx->encode.codec, (FLAC__int32*) ctx->encode.buffer, bytes / 4);
 
-				// callback has filled encoded data 
-				//LOG_INFO("WRITING %d %d", ctx->encode.bytes, bytes);
+				// callback has filled encoded data but might have reallocated it
 				bytes = ctx->encode.bytes;
 				ctx->encode.bytes = 0;
+				data = ctx->encode.data;
 			} else if (ctx->encode.format == CODEC_MP3) {
 				size_t block_size = shine_samples_per_pass(ctx->encode.codec);
 				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
 				ctx->encode.count += bytes / 4;
 				bytes = 0;
+
 				// encode all full block to not accumulate pcm
 				while (ctx->encode.count >= block_size) {
 					int written;
@@ -1222,19 +1214,21 @@ static void *http_thread_func(void *arg) {
 					memmove(ctx->encode.buffer, ctx->encode.buffer + ctx->encode.aac.in_samples, ctx->encode.count * 4);
 				}
 			} else {
+				data = (uint8_t*) pcm;
 				if (ctx->encode.format == CODEC_PCM) {
 #if WIN
-					for (int i = 0; i < bytes / 2; i++) data[i] = _byteswap_ushort(data[i]);									
+					for (int i = 0; i < bytes / 2; i++) pcm[i] = _byteswap_ushort(pcm[i]);									
 #else
-					for (int i = 0; i < bytes / 2; i++) data[i] = __builtin_bswap16(data[i]);
+					for (int i = 0; i < bytes / 2; i++) pcm[i] = __builtin_bswap16(pcm[i]);
 #endif
 				} else if (ctx->encode.header) {
 					memcpy(ctx->encode.data, &wave_header, sizeof(wave_header));
-					memcpy(ctx->encode.data + sizeof(wave_header), data, bytes);
+					memcpy(ctx->encode.data + sizeof(wave_header), pcm, bytes);
 
+					data = ctx->encode.data;
 					bytes += sizeof(wave_header);
 					ctx->encode.header = false;
-				}
+				} 
 			}
 
 			if (bytes) {
@@ -1245,9 +1239,9 @@ static void *http_thread_func(void *arg) {
 				fwrite(inbuf, len, 1, ctx->httpOUT);
 #endif
 				// store data for a potential re-send
-				space = min(bytes, TAIL_SIZE - ctx->http_count % TAIL_SIZE);
-				memcpy(ctx->http_tail + (ctx->http_count % TAIL_SIZE), data, space);
-				memcpy(ctx->http_tail, data + space, bytes - space);
+				space = min(bytes, CACHE_SIZE - ctx->http_count % CACHE_SIZE);
+				memcpy(ctx->http_cache + (ctx->http_count % CACHE_SIZE), data, space);
+				memcpy(ctx->http_cache, data + space, bytes - space);
 				ctx->http_count += bytes;
 
 				// check if ICY sending is active (len < ICY_INTERVAL)
@@ -1291,15 +1285,15 @@ static void *http_thread_func(void *arg) {
 				}
 
 				LOG_SDEBUG("[%p]: HTTP sent frame count:%u bytes:%u (W:%hu R:%hu)", ctx, frame_count++, bytes + offset, ctx->ab_write, ctx->ab_read);
-				sent = send_data(ctx->http_length == -3, sock, data + offset , bytes, 0);
+				ssize_t sent = send_data(ctx->http_length == -3, sock, data + offset , bytes, 0);
 
 				// update remaining count with desired length
 				if (ctx->icy.interval) ctx->icy.remain -= bytes;
 
 				gap = gettime_ms() - gap;
 
-				if (gap > 50) {
-					LOG_ERROR("[%p]: spent %u ms in send for %u bytes (sent %zd)!", ctx, gap, bytes, sent);
+				if (gap > 100) {
+					LOG_WARN("[%p]: spent %u ms in send for %u bytes (sent %zd)!", ctx, gap, bytes, sent);
 				}
 
 				if (sent != bytes) {
@@ -1351,7 +1345,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 #endif	
 		if (offset) {
 			// try to find the position in the memorized data
-			offset = (ctx->http_count && ctx->http_count > TAIL_SIZE) ? min(offset, ctx->http_count - TAIL_SIZE - 1) : 0;
+			offset = (ctx->http_count && ctx->http_count > CACHE_SIZE) ? min(offset, ctx->http_count - CACHE_SIZE - 1) : 0;
 
 			if (ctx->http_length == -3 && HTTP_11) head = "HTTP/1.1 206 Partial Content";
 			else head = "HTTP/1.0 206 Partial Content";
@@ -1390,7 +1384,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 	if (strstr(method, "HEAD")) return false;
 
 	// need to re-send the range or restart from as far as possible on simple GET
-	if (offset || (ctx->http_count && ctx->http_count <= TAIL_SIZE)) {
+	if (offset || (ctx->http_count && ctx->http_count <= CACHE_SIZE)) {
 		size_t count = 0;
 
 		LOG_INFO("[%p] re-sending bytes %zu-%zu", ctx, offset, ctx->http_count);
@@ -1400,7 +1394,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 			int sent;
 
 			bytes = min(bytes, ctx->http_count - offset - count);
-			sent = send_data(ctx->http_length == -3, sock, ctx->http_tail + ((offset + count) % TAIL_SIZE), bytes, 0);
+			sent = send_data(ctx->http_length == -3, sock, ctx->http_cache + ((offset + count) % CACHE_SIZE), bytes, 0);
 
 			if (sent < 0) {
 				LOG_ERROR("[%p]: error re-sending range %u", ctx, offset);
