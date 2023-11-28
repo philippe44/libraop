@@ -19,10 +19,8 @@
 #include "platform.h"
 #include "raop_server.h"
 #include "raop_streamer.h"
+#include "encoder.h"
 #include "alac.h"
-#include "FLAC/stream_encoder.h"
-#include "layer3.h"
-#include "faac.h"
 
 #include "cross_net.h"
 #include "cross_log.h"
@@ -46,7 +44,6 @@ static log_level 	*loglevel = &raop_loglevel;
 // default buffer size
 #define BUFFER_FRAMES 2048
 #define MAX_PACKET    2048
-#define FLAC_BLOCK_SIZE	4096
 #define CACHE_SIZE (2048*1024)
 
 #define RTP_SYNC 0x01
@@ -59,36 +56,6 @@ static log_level 	*loglevel = &raop_loglevel;
 
 enum { DATA, CONTROL, TIMING };
 
-static struct wave_header_s {
-	uint8_t	chunk_id[4];
-	uint8_t	chunk_size[4];
-	uint8_t	format[4];
-	uint8_t	subchunk1_id[4];
-	uint8_t	subchunk1_size[4];
-	uint8_t	audio_format[2];
-	uint8_t	channels[2];
-	uint8_t	sample_rate[4];
-	uint8_t byte_rate[4];
-	uint8_t	block_align[2];
-	uint8_t	bits_per_sample[2];
-	uint8_t	subchunk2_id[4];
-	uint8_t	subchunk2_size[4];
-} wave_header = {
-		{ 'R', 'I', 'F', 'F' },
-		{ 0x24, 0xff, 0xff, 0xff },
-		{ 'W', 'A', 'V', 'E' },
-		{ 'f','m','t',' ' },
-		{ 16, 0, 0, 0 },
-		{ 1, 0 },
-		{ 2, 0 },
-		{ 0x44, 0xac, 0x00, 0x00  },
-		{ 0x10, 0xb1, 0x02, 0x00 },
-		{ 4, 0 },
-		{ 16, 0 },
-		{ 'd', 'a', 't', 'a' },
-		{ 0x00, 0xff, 0xff, 0xff },
-	};
-
 typedef uint16_t seq_t;
 typedef struct audio_buffer_entry {   // decoded audio packets
 	int ready;
@@ -96,7 +63,7 @@ typedef struct audio_buffer_entry {   // decoded audio packets
 	int16_t *data;
 	int len;
 } abuf_t;
-
+ 
 typedef struct raopst_s {
 #ifdef __RTP_STORE
 	FILE *rtpIN, *rtpOUT, *httpOUT;
@@ -109,6 +76,7 @@ typedef struct raopst_s {
 	int in_frames, out_frames;
 	struct in_addr host, peer;
 	struct sockaddr_in rtp_host;
+	struct encoder_s* encoder;
 	struct {
 		unsigned short rport, lport;
 		int sock;
@@ -144,28 +112,6 @@ typedef struct raopst_s {
 	pthread_mutex_t ab_mutex;
 	pthread_t http_thread, rtp_thread;
 	struct {
-		enum { CODEC_MP3 = 0, CODEC_AAC, CODEC_FLAC, CODEC_PCM, CODEC_WAV } format;
-		void *codec;
-		int16_t* buffer;
-		uint8_t* data;
-		size_t count, bytes;
-		bool header;
-		union {
-			struct {
-				int bitrate;
-			} mp3;
-			struct {
-				int level;
-				size_t size;
-			} flac;
-			struct {
-				unsigned long in_samples, out_max_bytes;
-				int bitrate;
-			} aac;
-		};
-	} encode;
-	char* mimetype;
-	struct {
 		bool enabled;
 		size_t interval, remain;
 		bool  updated;
@@ -187,115 +133,15 @@ typedef struct raopst_s {
 static void 	buffer_alloc(abuf_t *audio_buffer, int size);
 static void 	buffer_release(abuf_t *audio_buffer);
 static void 	buffer_reset(abuf_t *audio_buffer);
-static void 	flac_init(raopst_t *ctx);
+
 static bool 	rtp_request_resend(raopst_t *ctx, seq_t first, seq_t last);
 static bool 	rtp_request_timing(raopst_t *ctx);
 static void*	rtp_thread_func(void *arg);
+
 static void*	http_thread_func(void *arg);
 static bool 	handle_http(raopst_t *ctx, int sock);
+
 static int	  	seq_order(seq_t a, seq_t b);
-static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], 
-														  size_t bytes, unsigned samples, unsigned current_frame, void *client_data);
-
-/*---------------------------------------------------------------------------*/
-static void flac_init(raopst_t *ctx) {
-	bool ok = true;
-	FLAC__StreamEncoder *codec = FLAC__stream_encoder_new();
-
-	ctx->encode.codec = codec;
-	ctx->encode.flac.size = FLAC_BLOCK_SIZE * 4 + 1024;
-	ctx->encode.data = malloc(ctx->encode.flac.size);
-	ctx->encode.buffer = malloc(MAX_PACKET * sizeof(FLAC__int32) * 2);
-	
-	LOG_INFO("[%p]: Using FLAC-%u (%p)", ctx, ctx->encode.flac.level, ctx->encode.codec);
-
-	ok &= FLAC__stream_encoder_set_verify(codec, false);
-	ok &= FLAC__stream_encoder_set_compression_level(codec, ctx->encode.flac.level);
-	ok &= FLAC__stream_encoder_set_channels(codec, 2);
-	ok &= FLAC__stream_encoder_set_bits_per_sample(codec, 16);
-	ok &= FLAC__stream_encoder_set_sample_rate(codec, 44100);
-	ok &= FLAC__stream_encoder_set_blocksize(codec, FLAC_BLOCK_SIZE);
-	ok &= FLAC__stream_encoder_set_streamable_subset(codec, true);
-	ok &= !FLAC__stream_encoder_init_stream(codec, flac_write_callback, NULL, NULL, NULL, ctx);
-
-	if (!ok) {
-		LOG_ERROR("{%p]: Cannot set FLAC parameters", ctx);
-	}
-}
-
-/*---------------------------------------------------------------------------*/
-static FLAC__StreamEncoderWriteStatus flac_write_callback(const FLAC__StreamEncoder *encoder, const FLAC__byte buffer[], size_t bytes, unsigned samples, unsigned current_frame, void *client_data) {
-	raopst_t *ctx = (raopst_t*) client_data;
-
-	if (ctx->encode.bytes + bytes > ctx->encode.flac.size) {
-		ctx->encode.flac.size = ctx->encode.bytes + bytes + 1024;
-		ctx->encode.data = realloc(ctx->encode.data, ctx->encode.flac.size);
-		LOG_WARN("[%p]: increasing flac output buffer %u", ctx, ctx->encode.flac.size);
-	}
-
-	memcpy(ctx->encode.data + ctx->encode.bytes, buffer, bytes);
-	ctx->encode.bytes += bytes;
-
-	return FLAC__STREAM_ENCODER_WRITE_STATUS_OK;
-}
-
-/*---------------------------------------------------------------------------*/
-static void mp3_init(raopst_t *ctx) {
-	shine_config_t config;
-
-	shine_set_config_mpeg_defaults(&config.mpeg);
-	config.wave.samplerate = 44100;
-	config.wave.channels = 2;
-	config.mpeg.bitr = ctx->encode.mp3.bitrate;
-	config.mpeg.mode = STEREO;
-
-	ctx->encode.codec = shine_initialise(&config);
-
-	// we should not have more than 2 blocks to buffer and the result is much less than 
-	ctx->encode.buffer = malloc(SHINE_MAX_SAMPLES * 4 * 2);
-	ctx->encode.data = malloc(SHINE_MAX_SAMPLES * 4 * 2);
-
-	LOG_INFO("[%p]: Using shine MP3-%u (%p)", ctx, ctx->encode.mp3.bitrate, ctx->encode.codec);
-}
-
-/*---------------------------------------------------------------------------*/
-static void aac_init(raopst_t* ctx) {
-	ctx->encode.codec = (void*)faacEncOpen(44100, 2, &ctx->encode.aac.in_samples, &ctx->encode.aac.out_max_bytes);
-	ctx->encode.buffer = malloc(ctx->encode.aac.in_samples * 2 * 2);
-	ctx->encode.data = malloc(ctx->encode.aac.out_max_bytes);
-
-	faacEncConfigurationPtr format = faacEncGetCurrentConfiguration(ctx->encode.codec);
-	format->bitRate = ctx->encode.aac.bitrate * 1000 / 2;
-	format->mpegVersion = MPEG4;
-	format->bandWidth = 0;
-	format->outputFormat = ADTS_STREAM;
-	format->inputFormat = FAAC_INPUT_16BIT;
-	faacEncSetConfiguration(ctx->encode.codec, format);
-
-	LOG_INFO("[%p]: Using AAC-%u (%p)", ctx, ctx->encode.aac.bitrate, ctx->encode.codec);
-}
-
-/*---------------------------------------------------------------------------*/
-static void encoder_close(raopst_t *ctx) {
-	if (!ctx->encode.codec) return;
-
-	// should use pointer to methods one day...
-	if (ctx->encode.format == CODEC_FLAC) {
-		FLAC__stream_encoder_finish(ctx->encode.codec);
-		FLAC__stream_encoder_delete(ctx->encode.codec);
-	} else if (ctx->encode.format == CODEC_MP3) {
-		int len;
-		shine_flush(ctx->encode.codec, &len);
-		shine_close(ctx->encode.codec);
-	} else if (ctx->encode.format == CODEC_AAC) {
-		faacEncEncode(ctx->encode.codec, NULL, 0, ctx->encode.data, ctx->encode.aac.out_max_bytes);
-		faacEncClose(ctx->encode.codec);
-	}
-
-	if (ctx->encode.buffer) free(ctx->encode.buffer);
-	if (ctx->encode.data) free(ctx->encode.data);
-	ctx->encode.codec = NULL;
-}
 
 /*---------------------------------------------------------------------------*/
 static alac_file* alac_init(int fmtp[32]) {
@@ -360,38 +206,10 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 	pthread_mutex_init(&ctx->ab_mutex, 0);
 	ctx->flush_seqno = -1;
 
-	/* this is done by calloc 
-	ctx->encode.buffer = NULL;
-	ctx->encode.data = NULL;
-	ctx->icy.enabled = false;
-	ctx->encode.header = false; 
-	*/
+	// create the encoder
+	ctx->encoder = encoder_create(codec, 44100, 2, 2, 0, &metadata);
 
-	if (!strcasecmp(codec, "pcm")) {
-		ctx->encode.format = CODEC_PCM;
-		ctx->mimetype = "audio/L16;rate=44100;channels=2";
-	} else if (!strcasecmp(codec, "wav")) {
-		ctx->encode.format = CODEC_WAV;
-		ctx->mimetype = "audio/wav";
-	} else if (strcasestr(codec, "mp3")) {
-		ctx->encode.format = CODEC_MP3;
-		ctx->mimetype = "audio/mpeg";
-		ctx->encode.mp3.bitrate = 192;
-		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.mp3.bitrate) && ctx->encode.mp3.bitrate > 320) ctx->encode.mp3.bitrate = 320;
-		ctx->icy.enabled = metadata;
-	} else if (strcasestr(codec, "aac")) {
-		ctx->encode.format = CODEC_AAC;
-		ctx->mimetype = "audio/aac";
-		ctx->encode.aac.bitrate = 128;
-		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.aac.bitrate) && ctx->encode.aac.bitrate > 320) ctx->encode.aac.bitrate = 320;
-		ctx->icy.enabled = metadata;
-	} else {
-		ctx->encode.format = CODEC_FLAC;
-		ctx->mimetype = "audio/flac";
-		ctx->encode.flac.level = 5;
-		if (sscanf(codec, "%*[^:]:%d", &ctx->encode.flac.level) && ctx->encode.flac.level > 9) ctx->encode.flac.level = 320;
-	}
-	
+	ctx->icy.enabled = metadata;
 	ctx->latency = atoi(latencies);
 	ctx->latency = (ctx->latency * 44100) / 1000;
 	if (strstr(latencies, ":f")) ctx->http_fill = true;
@@ -502,7 +320,7 @@ void raopst_end(raopst_t *ctx) {
 	for (int i = 0; i < 3; i++) if (ctx->rtp_sockets[i].sock > 0) closesocket(ctx->rtp_sockets[i].sock);
 
 	delete_alac(ctx->alac_codec);
-	encoder_close(ctx);
+	encoder_delete(ctx->encoder);
 
 	pthread_mutex_destroy(&ctx->ab_mutex);
 	buffer_release(ctx->audio_buffer);
@@ -536,7 +354,7 @@ bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, boo
 			ctx->playing = false;
 			ctx->synchro.first = false;
 			ctx->http_ready = false;
-			encoder_close(ctx);
+			encoder_close(ctx->encoder);
 		}
 		if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
 	}
@@ -623,14 +441,8 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 			ctx->playing = ctx->silence = true;
 			ctx->synchro.first = false;
 			ctx->resent_frames = ctx->silent_frames = 0;
-			ctx->http_count = ctx->encode.bytes = ctx->encode.count = 0;
-			if (ctx->encode.format == CODEC_FLAC) flac_init(ctx);
-			else if (ctx->encode.format == CODEC_MP3) mp3_init(ctx);
-			else if (ctx->encode.format == CODEC_AAC) aac_init(ctx);
-			else if (ctx->encode.format == CODEC_WAV) {
-				ctx->encode.header = true;
-				ctx->encode.data = malloc(MAX_PACKET * 2 + sizeof(wave_header));
-			}
+			ctx->http_count = 0;
+			encoder_open(ctx->encoder);
 		} else {
 			pthread_mutex_unlock(&ctx->ab_mutex);
 			return;
@@ -1052,7 +864,6 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 	/* I'm not 100% that all cases where audio_buffer should be reset are handled so there is a chance 
 	 * that we end-up here with curframe->ready but from an old frame. To avoid that to create a mess
 	 * we'll verify first that buffer is empty. We can be there anyway if case we do filling */
-
 	if (!buf_fill) {
 		// when silence is inserted at the top, need to move write pointer as well
 		ctx->ab_write++;
@@ -1175,61 +986,8 @@ static void *http_thread_func(void *arg) {
 
 		// wait for session to be ready before sending (no need for mutex)
 		if (ctx->http_ready && (pcm = _buffer_get_frame(ctx, &bytes)) != NULL) {
-			uint8_t* data = ctx->encode.data;
-
-			if (ctx->encode.format == CODEC_FLAC) {
-				for (size_t i = 0; i < bytes / 2; i++) ((FLAC__int32*)ctx->encode.buffer)[i] = pcm[i];
-				FLAC__stream_encoder_process_interleaved(ctx->encode.codec, (FLAC__int32*) ctx->encode.buffer, bytes / 4);
-
-				// callback has filled encoded data but might have reallocated it
-				bytes = ctx->encode.bytes;
-				ctx->encode.bytes = 0;
-				data = ctx->encode.data;
-			} else if (ctx->encode.format == CODEC_MP3) {
-				size_t block_size = shine_samples_per_pass(ctx->encode.codec);
-				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
-				ctx->encode.count += bytes / 4;
-				bytes = 0;
-
-				// encode all full block to not accumulate pcm
-				while (ctx->encode.count >= block_size) {
-					int written;
-					uint8_t* encoded = shine_encode_buffer_interleaved(ctx->encode.codec, ctx->encode.buffer, &written);
-					memcpy(ctx->encode.data + bytes, encoded, written);
-
-					bytes += written;
-					ctx->encode.count -= block_size;
-					memmove(ctx->encode.buffer, ctx->encode.buffer + block_size * 2, ctx->encode.count * 4);
-				}
-			} else if (ctx->encode.format == CODEC_AAC) {
-				memcpy(ctx->encode.buffer + ctx->encode.count * 2, pcm, bytes);
-				ctx->encode.count += bytes / 4;
-				bytes = 0;
-				// encode all full block to not accumulate pcm
-				while (ctx->encode.count >= ctx->encode.aac.in_samples / 2) {
-					bytes += faacEncEncode(ctx->encode.codec, (int32_t*)ctx->encode.buffer, ctx->encode.aac.in_samples, 
-											  ctx->encode.data + bytes, ctx->encode.aac.out_max_bytes);
-					ctx->encode.count -= ctx->encode.aac.in_samples / 2;
-					// we could just update the encode.buffer starting point but at least one last memcpy will be needed
-					memmove(ctx->encode.buffer, ctx->encode.buffer + ctx->encode.aac.in_samples, ctx->encode.count * 4);
-				}
-			} else {
-				data = (uint8_t*) pcm;
-				if (ctx->encode.format == CODEC_PCM) {
-#if WIN
-					for (int i = 0; i < bytes / 2; i++) pcm[i] = _byteswap_ushort(pcm[i]);									
-#else
-					for (int i = 0; i < bytes / 2; i++) pcm[i] = __builtin_bswap16(pcm[i]);
-#endif
-				} else if (ctx->encode.header) {
-					memcpy(ctx->encode.data, &wave_header, sizeof(wave_header));
-					memcpy(ctx->encode.data + sizeof(wave_header), pcm, bytes);
-
-					data = ctx->encode.data;
-					bytes += sizeof(wave_header);
-					ctx->encode.header = false;
-				} 
-			}
+			size_t frames = bytes / 4;
+			uint8_t* data = encoder_encode(ctx->encoder, pcm, frames, &bytes);
 
 			if (bytes) {
 				uint32_t space, gap = gettime_ms();
@@ -1334,7 +1092,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 	}
 
 	kd_add(resp, "Server", "HairTunes");
-	kd_add(resp, "Content-Type", ctx->mimetype);
+	kd_add(resp, "Content-Type", encoder_mimetype(ctx->encoder));
 
 	// is there a range request (chromecast non-compliance to HTTP !!!)
 	if (ctx->range && ((str = kd_lookup(headers, "Range")) != NULL)) {
@@ -1416,4 +1174,3 @@ static bool handle_http(raopst_t *ctx, int sock) {
 
 	return true;
 }
-
