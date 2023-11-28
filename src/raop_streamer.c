@@ -1135,6 +1135,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 	LOG_INFO("[%p]: responding: %s", ctx, str);
 
 	NFREE(body);
+	NFREE(str);
 	kd_free(resp);
 	kd_free(headers);
 
