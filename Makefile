@@ -64,7 +64,7 @@ LIBRARY	+= $(OPENSSL)/libopenssl.a
 DEFINES += -DSSL_STATIC_LIB
 endif
 
-all: lib $(EXECUTABLE)
+all: lib $(EXECUTABLE) 
 lib: directory $(LIB)
 directory:
 	@mkdir -p lib/$(HOST)/$(PLATFORM)	
@@ -75,8 +75,8 @@ $(EXECUTABLE): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB)
 ifeq ($(HOST),macos)
 	rm -f $(CORE)
 	lipo -create -output $(CORE) $$(ls $(CORE)* | grep -v '\-static')
-endif		
-	
+endif	
+
 $(LIB): $(OBJECTS)
 	$(AR) rcs $@ $^
 
