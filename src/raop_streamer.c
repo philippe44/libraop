@@ -1017,9 +1017,8 @@ static void *http_thread_func(void *arg) {
 										 ctx->metadata.artist ? " - " : "",
 										 ctx->metadata.title, ctx->metadata.artwork) - 1;
 						LOG_INFO("[%p]: ICY update %s", ctx, buffer + 1);
-						int rounded = (len_16 + 15) / 16;
-						memset(buffer + len_16, 0, rounded - len_16);
-						len_16 = rounded;
+						memset(buffer + len_16, 0, ((len_16 + 15) & ~15) - len_16);
+						len_16 = (len_16 + 15) & ~15;
 						ctx->icy.updated = false;
 						raopsr_metadata_free(&ctx->metadata);
 					}
@@ -1035,7 +1034,7 @@ static void *http_thread_func(void *arg) {
 					bytes -= offset;
 
 					// then send icy data
-					send_data(ctx->http_length == -3, sock, (void*) buffer, len_16 * 16 + 1, 0);
+					send_data(ctx->http_length == -3, sock, (void*) buffer, len_16 + 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 
 					LOG_SDEBUG("[%p]: ICY checked %u", ctx, ctx->icy.remain);
