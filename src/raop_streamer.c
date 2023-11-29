@@ -1017,7 +1017,9 @@ static void *http_thread_func(void *arg) {
 										 ctx->metadata.artist ? " - " : "",
 										 ctx->metadata.title, ctx->metadata.artwork) - 1;
 						LOG_INFO("[%p]: ICY update %s", ctx, buffer + 1);
-						len_16 = (len_16 + 15) / 16;
+						int rounded = (len_16 + 15) / 16;
+						memset(buffer + len_16, 0, rounded - len_16);
+						len_16 = rounded;
 						ctx->icy.updated = false;
 						raopsr_metadata_free(&ctx->metadata);
 					}
