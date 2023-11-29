@@ -1011,14 +1011,14 @@ static void *http_thread_func(void *arg) {
 						char *format;
 
 						// there is room for 1 extra byte at the beginning for length
-						if (ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s';";
+						if (ctx->metadata.artwork) format = "NStreamTitle='%s%s%s';StreamURL='%s'";
 						else format = "NStreamTitle='%s%s%s';";
 						int len = sprintf(buffer, format, ctx->metadata.artist,
 										 ctx->metadata.artist ? " - " : "",
 										 ctx->metadata.title, ctx->metadata.artwork) - 1;
 						LOG_INFO("[%p]: ICY update %s", ctx, buffer + 1);
 						len_16 = (len + 15) / 16;
-						memset(buffer + len, 0, len_16 * 16 - len);
+						memset(buffer + len + 1, 0, len_16 * 16 - len);
 						ctx->icy.updated = false;
 						raopsr_metadata_free(&ctx->metadata);
 					}
