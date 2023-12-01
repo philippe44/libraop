@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
 	if (pairing) AppleTVpairing(NULL, NULL, &secret);
 	
 	// create the raop context
-	if ((raopcl = raopcl_create(host, 0, 0, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, MAX_SAMPLES_PER_CHUNK,
+	if ((raopcl = raopcl_create(host, 0, 0, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, DEFAULT_FRAMES_PER_CHUNK,
 								latency, crypto, auth, secret, passwd, et, md,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
@@ -314,7 +314,7 @@ int main(int argc, char *argv[]) {
 	start = raopcl_get_ntp(NULL);
 	status = PLAYING;
 
-	buf = malloc(MAX_SAMPLES_PER_CHUNK*4);
+	buf = malloc(DEFAULT_FRAMES_PER_CHUNK * 4);
 	
 	do {
 		uint64_t playtime, now;
@@ -331,7 +331,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (status == PLAYING && raopcl_accept_frames(raopcl)) {
-			n = read(infile, buf, MAX_SAMPLES_PER_CHUNK*4);
+			n = read(infile, buf, DEFAULT_FRAMES_PER_CHUNK * 4);
 			if (!n)	continue;
 			raopcl_send_chunk(raopcl, buf, n / 4, &playtime);
 			frames += n / 4;

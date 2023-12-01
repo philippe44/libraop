@@ -62,9 +62,10 @@
 
 #include "platform.h"
 
-#define MAX_SAMPLES_PER_CHUNK 	352
-#define RAOP_LATENCY_MIN 		11025
-#define SECRET_SIZE				64
+#define DEFAULT_FRAMES_PER_CHUNK 352
+#define MAX_FRAMES_PER_CHUNK 4096
+#define RAOP_LATENCY_MIN 11025
+#define SECRET_SIZE	64
 
 typedef struct ntp_s {
 	uint32_t seconds;

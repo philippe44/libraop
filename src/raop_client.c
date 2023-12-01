@@ -544,15 +544,12 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 			return false;
 	}
 
-	//if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
-	if ((buffer = calloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size, 1)) == NULL) {
+	if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
 		pthread_mutex_unlock(&p->mutex);
 		if (encoded) free(encoded);
 		LOG_ERROR("[%p]: cannot allocate buffer",p);
 		return false;
 	}
-
-	//memset(buffer, 0, sizeof(sizeof(rtp_header_t)));
 
 	*playtime = TS2NTP(p->head_ts + raopcl_latency(p), p->sample_rate);
 
@@ -670,8 +667,8 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 {
 	raopcl_data_t *raopcld;
 
-	if (chunk_len > MAX_SAMPLES_PER_CHUNK) {
-		LOG_ERROR("Chunk length must below %d", MAX_SAMPLES_PER_CHUNK);
+	if (chunk_len > MAX_FRAMES_PER_CHUNK) {
+		LOG_ERROR("Chunk length must below %d", MAX_FRAMES_PER_CHUNK);
 		return NULL;
 	}
 
