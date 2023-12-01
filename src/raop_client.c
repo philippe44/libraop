@@ -544,14 +544,15 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 			return false;
 	}
 
-	if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
+	//if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
+	if ((buffer = calloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size, 1)) == NULL) {
 		pthread_mutex_unlock(&p->mutex);
 		if (encoded) free(encoded);
 		LOG_ERROR("[%p]: cannot allocate buffer",p);
 		return false;
 	}
 
-	memset(buffer, 0, sizeof(sizeof(rtp_header_t)));
+	//memset(buffer, 0, sizeof(sizeof(rtp_header_t)));
 
 	*playtime = TS2NTP(p->head_ts + raopcl_latency(p), p->sample_rate);
 
