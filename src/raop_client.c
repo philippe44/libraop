@@ -551,6 +551,8 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 		return false;
 	}
 
+	memset(buffer, 0, sizeof(sizeof(rtp_header_t)));
+
 	*playtime = TS2NTP(p->head_ts + raopcl_latency(p), p->sample_rate);
 
 	LOG_SDEBUG("[%p]: sending audio ts:%" PRIu64 " (pt:%u.%u now:%" PRIu64 ") ", p, p->head_ts, RAOP_SEC(*playtime), RAOP_FRAC(*playtime), raopcl_get_ntp(NULL));
