@@ -63,7 +63,7 @@
 #include "platform.h"
 
 #define DEFAULT_FRAMES_PER_CHUNK 352
-#define MAX_FRAMES_PER_CHUNK 496 // must match alac_wrapper.h ALAC_MAX_FRAMES
+#define MAX_FRAMES_PER_CHUNK 4096 // must match alac_wrapper.h ALAC_MAX_FRAMES
 #define RAOP_LATENCY_MIN 11025
 #define SECRET_SIZE	64
 
