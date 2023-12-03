@@ -897,28 +897,18 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 }
 
 /*---------------------------------------------------------------------------*/
-int send_data(bool chunked, int sock, void *data, int len, int flags) {
+int send_data(bool chunked, int sock, uint8_t *data, int size, int flags) {
+	if (!chunked) return send(sock, data, size, flags);
+
 	char chunk[16];
-	int bytes = len;
+	itoa(size, chunk, 16);
+	strcat(chunk, "\r\n");
 
-	if (chunked) {
-		itoa(len, chunk, 16);
-		strcat(chunk, "\r\n");
-		send(sock, chunk, strlen(chunk), flags);
-	}
+	send(sock, chunk, strlen(chunk), flags);
+	size = send(sock, data, size, flags);
+	send(sock, "\r\n", 2, flags);
 
-	while (bytes) {
-		int sent = send(sock, (uint8_t*) data + len - bytes, bytes, flags);
-		if (sent < 0) {
-			LOG_ERROR("Error sending data %u", len);
-			return -1;
-		}
-		bytes -= sent;
-	}
-
-	if (chunked) send(sock, "\r\n", 2, flags);
-
-	return len;
+	return size;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -950,7 +940,7 @@ static void *http_thread_func(void *arg) {
 
 				if (ctx->playing) {
 					short buf_fill = ctx->ab_write - ctx->ab_read + 1;
-					if (buf_fill > 0) ctx->silence_count -= min(ctx->silence_count, buf_fill);
+					if (buf_fill > 0) ctx->silence_count -= min(ctx->silence_count, (uint32_t) buf_fill);
 					else ctx->silence_count = 0;
 				}
 
@@ -1081,10 +1071,9 @@ static bool handle_http(raopst_t *ctx, int sock) {
 	key_data_t headers[64], resp[16] = { { NULL, NULL } };
 	size_t offset = 0;
 	int len;
-	bool HTTP_11;
 
 	if (!http_parse(sock, method, NULL, proto, headers, &body, &len)) return false;
-	HTTP_11 = strstr(proto, "1.1") != NULL;
+	bool HTTP_11 = strstr(proto, "HTTP/1.1") != NULL;
 
 	if (*loglevel >= lINFO) {
 		char *p = kd_dump(headers);
@@ -1106,8 +1095,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 			// try to find the position in the memorized data
 			offset = (ctx->http_count && ctx->http_count > CACHE_SIZE) ? min(offset, ctx->http_count - CACHE_SIZE - 1) : 0;
 
-			if (ctx->http_length == -3 && HTTP_11) head = "HTTP/1.1 206 Partial Content";
-			else head = "HTTP/1.0 206 Partial Content";
+			head = (ctx->http_length == -3 && HTTP_11) ? "HTTP/1.1 206 Partial Content" : "HTTP/1.0 206 Partial Content";
 			kd_vadd(resp, "Content-Range", "bytes %zu-%zu/*", offset, ctx->http_count);
 		}
 	}
@@ -1167,7 +1155,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 			if (ctx->icy.interval) {
 				ctx->icy.remain -= sent;
 				if (!ctx->icy.remain) {
-					send_data(ctx->http_length == -3, sock, "", 1, 0);
+					send_data(ctx->http_length == -3, sock, (uint8_t*) "", 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 				}
 			}
