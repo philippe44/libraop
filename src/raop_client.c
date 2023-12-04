@@ -543,7 +543,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 			LOG_ERROR("[%p]: don't know what we're doing here", p);
 			return false;
 	}
-
+	LOG_ERROR("WHAT SIZE %d", size);
 	if ((buffer = malloc(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + size)) == NULL) {
 		pthread_mutex_unlock(&p->mutex);
 		if (encoded) free(encoded);
