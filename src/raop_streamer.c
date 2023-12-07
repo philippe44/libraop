@@ -897,7 +897,7 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 }
 
 /*---------------------------------------------------------------------------*/
-int send_data(bool chunked, int sock, uint8_t *data, int size, int flags) {
+int send_data(bool chunked, int sock, const void *data, int size, int flags) {
 	if (!chunked) return send(sock, data, size, flags);
 
 	char chunk[16];
@@ -940,7 +940,7 @@ static void *http_thread_func(void *arg) {
 
 				if (ctx->playing) {
 					short buf_fill = ctx->ab_write - ctx->ab_read + 1;
-					if (buf_fill > 0) ctx->silence_count -= min(ctx->silence_count, (uint32_t) buf_fill);
+					if (buf_fill > 0) ctx->silence_count -= min(ctx->silence_count, buf_fill);
 					else ctx->silence_count = 0;
 				}
 
@@ -1024,7 +1024,7 @@ static void *http_thread_func(void *arg) {
 					bytes -= offset;
 
 					// then send icy data
-					send_data(ctx->http_length == -3, sock, (void*) buffer, len_16 * 16 + 1, 0);
+					send_data(ctx->http_length == -3, sock, buffer, len_16 * 16 + 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 
 					LOG_SDEBUG("[%p]: ICY checked %u", ctx, ctx->icy.remain);
@@ -1094,7 +1094,6 @@ static bool handle_http(raopst_t *ctx, int sock) {
 		if (offset) {
 			// try to find the position in the memorized data
 			offset = (ctx->http_count && ctx->http_count > CACHE_SIZE) ? min(offset, ctx->http_count - CACHE_SIZE - 1) : 0;
-
 			head = (ctx->http_length == -3 && HTTP_11) ? "HTTP/1.1 206 Partial Content" : "HTTP/1.0 206 Partial Content";
 			kd_vadd(resp, "Content-Range", "bytes %zu-%zu/*", offset, ctx->http_count);
 		}
@@ -1116,7 +1115,8 @@ static bool handle_http(raopst_t *ctx, int sock) {
 		kd_add(resp, "Transfer-Encoding", "chunked");
 		str = http_send(sock, head ? head : "HTTP/1.1 200 OK", resp);
 	} else {
-		if (ctx->http_length > 0) kd_vadd(resp, "Content-Length", "%d", ctx->http_length);
+		// content-length is only for current payload, so ignore it with range 
+		if (ctx->http_length > 0 && !offset) kd_vadd(resp, "Content-Length", "%d", ctx->http_length);
 		kd_add(resp, "Connection", "close");
 		str = http_send(sock, head ? head : "HTTP/1.0 200 OK", resp);
 	}
@@ -1155,7 +1155,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 			if (ctx->icy.interval) {
 				ctx->icy.remain -= sent;
 				if (!ctx->icy.remain) {
-					send_data(ctx->http_length == -3, sock, (uint8_t*) "", 1, 0);
+					send_data(ctx->http_length == -3, sock, "", 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 				}
 			}

@@ -23,6 +23,7 @@ typedef enum { RAOP_STREAM, RAOP_PLAY, RAOP_FLUSH, RAOP_PAUSE, RAOP_STOP, RAOP_V
 typedef void (*raopsr_cb_t)(void *owner, raopsr_event_t event, ...);
 typedef void (*raop_http_cb_t)(void *owner, struct key_data_s *headers, struct key_data_s *response);
 
+// set http_length to -3 for chunked-encoding, 0 for no content-length or to a positive value
 struct raopsr_s* raopsr_create(struct in_addr host, struct mdnsd *svr, char *name,
 						  char *model, unsigned char mac[6], char *stream_codec, bool stream_metadata,
 						  bool drift, bool flush, char *latencies, void *owner,
