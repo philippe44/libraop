@@ -1,0 +1,2 @@
+2023-12
+ - raop_streamer: no content-length on chunked-encoding, even on range request
