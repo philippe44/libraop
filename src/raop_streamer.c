@@ -434,7 +434,7 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		if ((ctx->flush_seqno == -1 || seq_order(ctx->flush_seqno, seqno)) &&
 		   ((ctx->synchro.required && ctx->synchro.first) || !ctx->synchro.required)) {
 			ctx->ab_write = seqno-1;
-			ctx->ab_read = seqno;
+			ctx->ab_read = ctx->ab_write + 1;
 			ctx->skip = 0;
 			ctx->flush_seqno = -1;
 			ctx->playing = ctx->silence = true;
@@ -953,7 +953,7 @@ static void *http_thread_func(void *arg) {
 			if (!ctx->http_count) {
 				// send just the right amount of silence (ab_xxx are always accurate)
 				short buf_fill = ctx->ab_write - ctx->ab_read + 1;
-				if (buf_fill > 0) ctx->silence_count = ctx->delay - min(ctx->delay, buf_fill);
+				if (buf_fill >= 0) ctx->silence_count = ctx->delay - min(ctx->delay, buf_fill);
 				else ctx->silence_count = 0;
 
 				LOG_INFO("[%p]: sending %d silence frames", ctx, ctx->silence_count);
