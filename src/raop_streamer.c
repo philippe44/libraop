@@ -127,6 +127,7 @@ typedef struct raopst_s {
 	uint8_t *http_cache;
 	size_t http_count;
 	int http_length;
+	bool close_socket;
 } raopst_t;
 
 #define BUFIDX(seqno) ((seq_t)(seqno) % BUFFER_FRAMES)
@@ -354,6 +355,9 @@ bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, boo
 			ctx->playing = false;
 			ctx->synchro.first = false;
 			ctx->http_ready = false;
+			ctx->close_socket = true;
+			ctx->http_count = 0;
+			ctx->ab_read = ctx->ab_write + 1;
 			encoder_close(ctx->encoder);
 		}
 		if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
@@ -380,8 +384,7 @@ void raopst_record(raopst_t *ctx, unsigned short seqno, unsigned rtptime) {
 
 /*---------------------------------------------------------------------------*/
 static void buffer_alloc(abuf_t *audio_buffer, int size) {
-	int i;
-	for (i = 0; i < BUFFER_FRAMES; i++) {
+	for (int i = 0; i < BUFFER_FRAMES; i++) {
 		audio_buffer[i].data = malloc(size);
 		audio_buffer[i].ready = 0;
 	}
@@ -389,16 +392,12 @@ static void buffer_alloc(abuf_t *audio_buffer, int size) {
 
 /*---------------------------------------------------------------------------*/
 static void buffer_release(abuf_t *audio_buffer) {
-	int i;
-	for (i = 0; i < BUFFER_FRAMES; i++) {
-		free(audio_buffer[i].data);
-	}
+	for (int i = 0; i < BUFFER_FRAMES; i++) free(audio_buffer[i].data);
 }
 
 /*---------------------------------------------------------------------------*/
 static void buffer_reset(abuf_t *audio_buffer) {
-	int i;
-	for (i = 0; i < BUFFER_FRAMES; i++) audio_buffer[i].ready = 0;
+	for (int i = 0; i < BUFFER_FRAMES; i++) audio_buffer[i].ready = 0;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -934,19 +933,7 @@ static void *http_thread_func(void *arg) {
 			if (sock != -1 && ctx->running) {
 				int on = 1;
 				setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
-
-				ctx->silence_count = ctx->delay;
-				pthread_mutex_lock(&ctx->ab_mutex);
-
-				if (ctx->playing) {
-					short buf_fill = ctx->ab_write - ctx->ab_read + 1;
-					if (buf_fill > 0) ctx->silence_count -= min(ctx->silence_count, buf_fill);
-					else ctx->silence_count = 0;
-				}
-
-				pthread_mutex_unlock(&ctx->ab_mutex);
-
-				LOG_INFO("[%p]: got HTTP connection %u (silent frames %d)", ctx, sock, ctx->silence_count);
+				LOG_INFO("[%p]: got HTTP connection %u", ctx, sock);
 			} else continue;
 		}
 
@@ -961,14 +948,24 @@ static void *http_thread_func(void *arg) {
 		if (n > 0) {
 			res = handle_http(ctx, sock);
 			ctx->http_ready = res;
+
+			// only send silence when it's the first GET (or after a flush)
+			if (!ctx->http_count) {
+				// send just the right amount of silence (ab_xxx are always accurate)
+				short buf_fill = ctx->ab_write - ctx->ab_read + 1;
+				if (buf_fill > 0) ctx->silence_count = ctx->delay - min(ctx->delay, buf_fill);
+				else ctx->silence_count = 0;
+
+				LOG_INFO("[%p]: sending %d silence frames", ctx, ctx->silence_count);
+			}
 		}
 
 		// terminate connection if required by HTTP peer
-		if (n < 0 || !res) {
-			closesocket(sock);
+		if (n < 0 || !res || ctx->close_socket) {
 			LOG_INFO("HTTP close %u", sock);
+			closesocket(sock);
 			sock = -1;
-			ctx->http_ready = false;
+			ctx->close_socket = ctx->http_ready = false;
 		}
 
 		int16_t* pcm;
@@ -987,7 +984,7 @@ static void *http_thread_func(void *arg) {
 				fwrite(inbuf, len, 1, ctx->httpOUT);
 #endif
 				// store data for a potential re-send
-				space = min(bytes, CACHE_SIZE - ctx->http_count % CACHE_SIZE);
+				space = min(bytes, CACHE_SIZE - (ctx->http_count % CACHE_SIZE));
 				memcpy(ctx->http_cache + (ctx->http_count % CACHE_SIZE), data, space);
 				memcpy(ctx->http_cache, data + space, bytes - space);
 				ctx->http_count += bytes;

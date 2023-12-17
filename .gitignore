@@ -67,5 +67,5 @@ __history
 *.bak
 *.user
 lib/
-bin/*.pdb
+*.pdb
 *.bat
