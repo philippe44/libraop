@@ -51,7 +51,6 @@ static log_level 	*loglevel = &raop_loglevel;
 
 #define RESEND_TO	150
 
-#define	ICY_INTERVAL 16384
 #define ICY_LEN_MAX	 (255*16+1)
 
 enum { DATA, CONTROL, TIMING };
@@ -1136,7 +1135,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 		LOG_INFO("[%p] re-sending bytes %zu-%zu", ctx, offset, ctx->http_count);
 		ctx->silence_count = 0;
 		while (count != ctx->http_count - offset) {
-			size_t bytes = ctx->icy.interval ? ctx->icy.remain : ICY_INTERVAL;
+			size_t bytes = ctx->icy.active ? ctx->icy.remain : 16384;
 			int sent;
 
 			bytes = min(bytes, ctx->http_count - offset - count);
