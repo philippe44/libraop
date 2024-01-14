@@ -112,7 +112,7 @@ typedef struct raopst_s {
 	pthread_mutex_t ab_mutex;
 	pthread_t http_thread, rtp_thread;
 	struct {
-		bool enabled;
+		bool enabled, active;
 		size_t interval, remain;
 		bool  updated;
 	} icy;
@@ -208,7 +208,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 	ctx->flush_seqno = -1;
 
 	// create the encoder
-	ctx->encoder = encoder_create(codec, 44100, 2, 2, 0, &metadata);
+	ctx->encoder = encoder_create(codec, 44100, 2, 2, 0, &ctx->icy.interval);
 
 	ctx->icy.enabled = metadata;
 	ctx->latency = atoi(latencies);
@@ -990,7 +990,7 @@ static void *http_thread_func(void *arg) {
 				ctx->http_count += bytes;
 
 				// check if ICY sending is active (len < ICY_INTERVAL)
-				if (ctx->icy.interval && bytes > ctx->icy.remain) {
+				if (ctx->icy.active && bytes > ctx->icy.remain) {
 					int len_16 = 0;
 					char buffer[ICY_LEN_MAX];
 
@@ -1034,7 +1034,7 @@ static void *http_thread_func(void *arg) {
 				ssize_t sent = send_data(ctx->http_length == -3, sock, data + offset , bytes, 0);
 
 				// update remaining count with desired length
-				if (ctx->icy.interval) ctx->icy.remain -= bytes;
+				if (ctx->icy.active) ctx->icy.remain -= bytes;
 
 				gap = gettime_ms() - gap;
 
@@ -1098,9 +1098,10 @@ static bool handle_http(raopst_t *ctx, int sock) {
 
 	// check if add ICY metadata is needed (only on live stream)
 	if (ctx->icy.enabled &&	((str = kd_lookup(headers, "Icy-MetaData")) != NULL) && atoi(str)) {
-		kd_vadd(resp, "icy-metaint", "%u", ICY_INTERVAL);
-		ctx->icy.interval = ctx->icy.remain = ICY_INTERVAL;
-	} else ctx->icy.interval = 0;
+		kd_vadd(resp, "icy-metaint", "%u", ctx->icy.interval);
+		ctx->icy.remain = ctx->icy.interval;
+		ctx->icy.active = true;
+	} else ctx->icy.active = false;
 
 	// let owner modify HTTP response if needed
 	if (ctx->http_cb) ctx->http_cb(ctx->owner, headers, resp);
@@ -1149,7 +1150,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 			count += sent;
 
 			// send ICY data if needed
-			if (ctx->icy.interval) {
+			if (ctx->icy.active) {
 				ctx->icy.remain -= sent;
 				if (!ctx->icy.remain) {
 					send_data(ctx->http_length == -3, sock, "", 1, 0);
