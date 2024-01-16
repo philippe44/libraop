@@ -436,7 +436,7 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 	if (!ctx->playing) {
 		if ((ctx->flush_seqno == -1 || seq_order(ctx->flush_seqno, seqno)) &&
 		    (!ctx->synchro.required || ctx->synchro.first)) {
-			LOG_INFO("[%p]: accepting packets from:%hu (flush:%d, r:%d, f:%d)", ctx, seqno, ctx->flush_seqno, ctx->synchro.required, ctx->synchro.first);
+			LOG_INFO("[%p]: accepting packets from %hu (flush:%d, r:%d, f:%d)", ctx, seqno, ctx->flush_seqno, ctx->synchro.required, ctx->synchro.first);
 			ctx->ab_write = seqno-1;
 			ctx->ab_read = ctx->ab_write + 1;
 			ctx->skip = 0;
