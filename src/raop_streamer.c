@@ -338,19 +338,23 @@ void raopst_end(raopst_t *ctx) {
 
 /*---------------------------------------------------------------------------*/
 bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, bool exit_locked, bool silence) {
-	bool rc = true;
+	bool stopped = true;
 	uint32_t now = gettime_ms();
 
+	pthread_mutex_lock(&ctx->ab_mutex);
+
+	// always store flush seqno as we only want stricly above it, even when equal to RECORD
+	ctx->flush_seqno = seqno;
+
+	// we just need to have memorized the flush seqno
 	if (now < ctx->record.time + 250 || (ctx->record.seqno == seqno && ctx->record.rtptime == rtptime)) {
-		rc = false;
-		LOG_ERROR("[%p]: FLUSH ignored as same as RECORD (%hu - %u)", ctx, seqno, rtptime);
+		LOG_WARN("[%p]: FLUSH ignored (early or same as RECORD) %hu - %u", ctx, seqno, rtptime);
+		stopped = false;
 	} else {
-		pthread_mutex_lock(&ctx->ab_mutex);
+		LOG_INFO("[%p]: FLUSH up to %hu - %u", ctx, seqno, rtptime);
 		buffer_reset(ctx->audio_buffer);
-		ctx->flush_seqno = seqno;
-		if (silence) {
-			ctx->pause = true;
-		} else {
+
+		if (!silence) {
 			ctx->playing = false;
 			ctx->synchro.first = false;
 			ctx->http_ready = false;
@@ -358,13 +362,13 @@ bool raopst_flush(raopst_t *ctx, unsigned short seqno, unsigned int rtptime, boo
 			ctx->http_count = 0;
 			ctx->ab_read = ctx->ab_write + 1;
 			encoder_close(ctx->encoder);
+		} else {
+			ctx->pause = true;
 		}
-		if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
 	}
 
-	LOG_INFO("[%p]: flush %hu %u", ctx, seqno, rtptime);
-
-	return rc;
+	if (!exit_locked) pthread_mutex_unlock(&ctx->ab_mutex);
+	return stopped;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -431,7 +435,8 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 
 	if (!ctx->playing) {
 		if ((ctx->flush_seqno == -1 || seq_order(ctx->flush_seqno, seqno)) &&
-		   ((ctx->synchro.required && ctx->synchro.first) || !ctx->synchro.required)) {
+		    (!ctx->synchro.required || ctx->synchro.first)) {
+			LOG_INFO("[%p]: accepting packets from:%hu (flush:%d, r:%d, f:%d)", ctx, seqno, ctx->flush_seqno, ctx->synchro.required, ctx->synchro.first);
 			ctx->ab_write = seqno-1;
 			ctx->ab_read = ctx->ab_write + 1;
 			ctx->skip = 0;
@@ -513,8 +518,8 @@ static void buffer_put_packet(raopst_t *ctx, seq_t seqno, unsigned rtptime, bool
 		LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	}
 
-	if (!(ctx->in_frames++ & 0x3ff)) {
-		LOG_INFO("[%p]: fill [level:%hu] [W:%hu R:%hu]", ctx, (seq_t) ctx->ab_write - ctx->ab_read + 1, ctx->ab_write, ctx->ab_read);
+	if (!(ctx->in_frames++ & 0xfff) || (!(ctx->in_frames & 0x3f) && ctx->ab_write - ctx->ab_read > 24)) {
+		LOG_INFO("[%p]: fill [level:%hu] [W:%hu R:%hu]", ctx, ctx->ab_write - ctx->ab_read + 1, ctx->ab_write, ctx->ab_read);
 	}
 
 	if (abuf) {
@@ -883,7 +888,7 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 	}
 
 	// a bit of logging from time to time or when we have a network blackout
-	if (!(ctx->out_frames++ & 0x3ff) || ctx->filled_frames > 100) {
+	if (!(ctx->out_frames++ & 0xfff) || (!(ctx->out_frames & 0x3f) && buf_fill >= 25) || ctx->filled_frames > 100) {
 		LOG_INFO("[%p]: drain [level:%hd gap:%d] [W:%hu R:%hu] [R:%u S:%u F:%u]",
 					ctx, buf_fill-1, playtime - now, ctx->ab_write, ctx->ab_read,
 					ctx->resent_frames, ctx->silent_frames, ctx->filled_frames);
