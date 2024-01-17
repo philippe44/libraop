@@ -57,7 +57,7 @@ enum { DATA, CONTROL, TIMING };
 
 typedef uint16_t seq_t;
 typedef struct audio_buffer_entry {   // decoded audio packets
-	int ready;
+	bool ready, missed;
 	uint32_t rtptime, last_resend;
 	int16_t *data;
 	int len;
@@ -415,8 +415,6 @@ static void alac_decode(raopst_t *ctx, int16_t *dest, char *buf, int len, int *o
 
 /*---------------------------------------------------------------------------*/
 static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool first, char* data, int len) {
-	abuf_t* abuf = NULL;
-
 	pthread_mutex_lock(&ctx->ab_mutex);
 
 	/* if we have received a RECORD with a seqno, then this is the first allowed rtp sequence number 
@@ -424,7 +422,8 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	 * us what should be our first allowed packet but we must accept everything, wait and clean when 
 	 * we the it arrives. This means that first packet moves us to RTP_STREAM state where we accept
 	 * frames but wait for the FLUSH. If this was a FLUSH while playing, then we are also in RTP_WAIT 
-	 * state but we do have an allowed seqno and we should not accept any frame before we have it */
+	 * state but we do have an allowed seqno and we don't accept any frame before we have it. There is
+	 * a catch that recent iOS send silence frames just after flush when paused */
 
 	// if we have a pending first seqno and we are below, always ignore it
 	if (ctx->first_seqno != -1 && seq_order(seqno, ctx->first_seqno)) {
@@ -491,9 +490,10 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	// release as soon as one recent frame is received
 	if (ctx->pause && seq_order(ctx->first_seqno, seqno)) ctx->pause = false;
 
+	abuf_t* abuf = ctx->audio_buffer + BUFIDX(seqno);
+
 	if (seqno == (uint16_t) (ctx->ab_write + 1)) {
 		// expected packet
-		abuf = ctx->audio_buffer + BUFIDX(seqno);
 		ctx->ab_write = seqno;
 		LOG_SDEBUG("[%p]: packet expected seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	} else if (seq_order(ctx->ab_write, seqno)) {
@@ -518,15 +518,13 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 			}
 		}
 		LOG_DEBUG("[%p]: packet newer seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
-		abuf = ctx->audio_buffer + BUFIDX(seqno);
 		ctx->ab_write = seqno;
 	} else if (seq_order(ctx->ab_read, seqno + 1)) {
 		// recovered packet, not yet sent
-		abuf = ctx->audio_buffer + BUFIDX(seqno);
 		LOG_DEBUG("[%p]: packet recovered seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
 	} else {
-		// too late
-		LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
+		if (abuf->missed) LOG_INFO("[%p]: packet too late seqno:%hu rtptime:%u (W:%hu R:%hu)", ctx, seqno, rtptime, ctx->ab_write, ctx->ab_read);
+		abuf = NULL;
 	}
 
 	if (!(ctx->in_frames++ & 0xfff) || (!(ctx->in_frames & 0x3f) && ctx->ab_write - ctx->ab_read > 24 && ctx->state == RTP_PLAY)) {
@@ -535,14 +533,20 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 
 	if (abuf) {
 		alac_decode(ctx, abuf->data, data, len, &abuf->len);
-		abuf->ready = 1;
+		abuf->ready = true;
+		abuf->missed = false;
 		// this is the local rtptime when this frame is expected to play
 		abuf->rtptime = rtptime;
 #ifdef __RTP_STORE
 		fwrite(data, len, 1, ctx->rtpIN);
 		fwrite(abuf->data, abuf->len, 1, ctx->rtpOUT);
 #endif
-		if (ctx->state == RTP_PLAY && ctx->silence && memcmp(abuf->data, ctx->silence_frame, abuf->len)) {
+		bool silence = ctx->silence ? !memcmp(abuf->data, ctx->silence_frame, abuf->len) : false;
+
+		// just discard all silences frames at the beginning (might be an iOS flush + silence)
+		if (silence && ctx->ab_write - ctx->ab_read > 1) ctx->audio_buffer[BUFIDX(ctx->ab_read++)].ready = false;
+
+		if (ctx->state == RTP_PLAY && ctx->silence && !silence) {
 			ctx->event_cb(ctx->owner, RAOP_STREAMER_PLAY);
 			ctx->silence = false;
 			// if we have some metadata, just do a refresh (case of FLUSH not sending metadata)
@@ -875,9 +879,9 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 		return NULL;
 	}
 
-	/* I'm not 100% that all cases where audio_buffer should be reset are handled so there is a chance 
-	 * that we end-up here with curframe->ready but from an old frame. To avoid that to create a mess
-	 * we'll verify first that buffer is empty. We can be there anyway if case we do filling */
+	/* I'm not 100% sure that all cases where audio_buffer should be reset are handled so there is a 
+	 * chance that we end-up here with curframe->ready but from an old frame. To avoid that to create a 
+	 * mess we'll verify first that buffer is empty. We can be there anyway if case we do filling */
 	if (!buf_fill) {
 		// when silence is inserted at the top, need to move write pointer as well
 		ctx->ab_write++;
@@ -885,6 +889,7 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 		curframe->ready = 0;
 	} else if (!curframe->ready) {
 		ctx->silent_frames++;
+		curframe->missed = true;
 	} else {
 		LOG_SDEBUG("[%p]: prepared frame (fill:%hd, W:%hu R:%hu)", ctx, buf_fill - 1, ctx->ab_write, ctx->ab_read);
 	}
