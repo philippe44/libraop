@@ -455,7 +455,7 @@ static bool handle_rtsp(raopsr_t *ctx, int sock)
 		if ((p = strcasestr(buf, "timing_port")) != NULL) sscanf(p, "%*[^=]=%hu", &tport);
 		if ((p = strcasestr(buf, "control_port")) != NULL) sscanf(p, "%*[^=]=%hu", &cport);
 
-		ht = raopst_init(ctx->host, ctx->peer, ctx->streamer.codec, ctx->streamer.metadata, false, ctx->drift, true, ctx->latencies,
+		ht = raopst_init(ctx->host, ctx->peer, ctx->streamer.codec, ctx->streamer.metadata, ctx->drift, true, ctx->latencies,
 							ctx->rtsp.aeskey, ctx->rtsp.aesiv, ctx->rtsp.fmtp,
 							cport, tport, ctx, event_cb, http_cb, ctx->ports.base,
 							ctx->ports.range, ctx->http_length);

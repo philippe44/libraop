@@ -22,7 +22,7 @@ typedef enum { RAOP_STREAMER_PLAY } raopst_event_t;
 typedef	void (*raopst_cb_t)(void *owner, raopst_event_t event);
 
 raopst_resp_t 	raopst_init(struct in_addr host, struct in_addr peer, char *codec, bool metadata,
-							bool sync, bool drift, bool range, char *latencies,
+							bool drift, bool range, char *latencies,
 							char *aeskey, char *aesiv, char *fmtpstr,
 							short unsigned pCtrlPort, short unsigned pTimingPort,
 							void *owner, raopst_cb_t event_cb, raop_http_cb_t http_cb,
