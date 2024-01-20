@@ -585,7 +585,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 
 	pthread_mutex_unlock(&p->mutex);
 
-	if (NTP2MS(*playtime) % 10000 < 8) {
+	if (NTP2MS(*playtime) % 60000 < 8) {
 		LOG_INFO("[%p]: check n:%u p:%u ts:%" PRIu64 " sn:%u\n               "
 				  "retr: %u, avail: %u, send: %u, select: %u)", p,
 				 RAOP_MSEC(now), RAOP_MSEC(*playtime), p->head_ts, p->seq_number,
