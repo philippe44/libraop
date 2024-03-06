@@ -698,6 +698,7 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 		if (!strcasecmp(pkd[i].key, "Content-Length")) clen = atol(pkd[i].data);
 
 		i++;
+		pkd[i].key = NULL;
 	}
 
 	if (clen) {
