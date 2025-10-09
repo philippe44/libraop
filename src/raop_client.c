@@ -1366,9 +1366,8 @@ void *_rtp_control_thread(void *args)
 		// Send keepalive packet every 25 seconds
 		if (now - raopcld->last_keepalive >= MS2NTP(25000)) {
 			LOG_INFO("[%p]: sending keepalive packet", raopcld);
-			if (raopcl_keepalive(raopcld)) {
-				raopcld->last_keepalive = now;
-			}
+			raopcl_keepalive(raopcld);
+			raopcld->last_keepalive = now;
 		}
 
 		FD_ZERO(&rfds);
