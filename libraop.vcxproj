@@ -79,7 +79,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>FLAC__NO_DLL;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FLAC__NO_DLL;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32;OPENSSL_SUPPRESS_DEPRECATED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>crosstools\src;dmap-parser;libmdns\targets\include\mdnssvc;libmdns\targets\include\mdnssd;libcodecs\targets\include\faac;libcodecs\targets\include\flac;libcodecs\targets\include\shine;libcodecs\targets\include\addons;libpthreads4w\targets\win32\x86\include;libopenssl\targets\win32\x86\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4267;4244;5105</DisableSpecificWarnings>

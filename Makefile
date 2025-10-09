@@ -4,7 +4,7 @@ endif
 
 ifeq ($(findstring gcc,$(CC)),gcc)
 CFLAGS  += -Wno-stringop-truncation -Wno-stringop-overflow -Wno-format-truncation -Wno-multichar 
-LDFLAGS += -s -lstdc++
+LDFLAGS += -s -lstdc++ -latomic
 else
 CFLAGS += -fno-temp-file
 LDFLAGS += -lc++
@@ -19,7 +19,7 @@ BUILDDIR   = $(dir $(CORE))$(HOST)/$(PLATFORM)
 LIB        = lib/$(HOST)/$(PLATFORM)/libraop.a
 EXECUTABLE = $(CORE)-$(PLATFORM)
 
-DEFINES  = -DNDEBUG -D_GNU_SOURCE
+DEFINES  = -DNDEBUG -D_GNU_SOURCE -DOPENSSL_SUPPRESS_DEPRECATED
 CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
 LDFLAGS += -lpthread -ldl -lm -L.
 
