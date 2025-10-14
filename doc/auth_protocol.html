@@ -41,20 +41,21 @@
 
           lang="en-US"> <font face="Segoe UI, sans-serif"><font class="msonormal"
 
-              style="font-size: 12pt" size="3">It’s critical that the whole
+              style="font-size: 12pt" size="3">It is critical that the whole
               exchange (maybe except the /pair-pin-start) is done with the same
               socket, so make sure your HTTP library uses keep-alive (it is not
               mandatory, for AppleTV, to send the Connection: keep-alive, just
               make sure the HTTP tool you use does not close the connection once
               it has received an answer) . The example below use RTSP/1.0 but
               HTTP/1.0 seems to be usable with no difference. <br>
-            </font></font></p>
+        </font></font></p>
+	
         <p class="msonormal" style="margin-top: 0.66cm; margin-bottom: 0.4cm" lang="en-US">
           <span style="display: inline-block; border-top: none; border-bottom: 1.00pt solid #09598a; border-left: none; border-right: none; padding-top: 0cm; padding-bottom: 0.05cm; padding-left: 0cm; padding-right: 0cm"><font
 
               face="Segoe UI, sans-serif"><font style="font-size: 18pt" size="5"><b><font
 
-                    color="#09598a">10.1. RTSP pairing (required only
+                    color="#09598a">10.1. RTSP pairing ("pin-pair-start" + "pair-setup-pin", required only
                     once)</font></b></font></font></span></p>
         <p class="msonormal" style="margin-top: 0.26cm; margin-bottom: 0.5cm" lang="en-US">
           <font color="#09598a"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
@@ -69,7 +70,11 @@
 
             color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 
-                size="3"><span lang="en-US">The </span></font></font></font><font
+								    size="3"><span lang="en-US">This is needed
+		  if the Apple TV (AirPlay server) is configured to require it (usual case) or if the client
+		  requires it (often the case with corporately-owned MDM-managed clients).
+		  
+		  The </span></font></font></font><font
 
             color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 
@@ -96,14 +101,13 @@ style="font-weight: bold;">RTSP/1.0 200 OK
 Server: AirTunes/320.20</code></pre><font color="#09598a"><font face="Segoe UI, sans-serif"><font
 
 style="font-size: 13pt" size="3"><span lang="en-US"><b>STEP
-                1 - CONFIRM PIN</b></span></font></font></font><font face="Segoe UI, sans-serif"><font
+                1 ("pin-pair-start") - CONFIRM PIN </b></span></font></font></font><font face="Segoe UI, sans-serif"><font
 
 style="font-size: 12pt" size="3"><br><br>The
           <b>pair-setup-pin </b>POST request is used to display a PIN code on
           the AppleTV.<br></font></font><font face="Segoe UI, sans-serif"><font
 
-style="font-size: 12pt" size="3"><br>Build
-a
+style="font-size: 12pt" size="3"><br>Build a
           <b>plist</b> :</font></font><table style="border-collapse: separate; margin: 10px 10px 30px 30px; width: 660px; color: black; font-family: &quot;Segoe UI&quot;,&quot;Lucida Grande&quot;,&quot;Trebuchet MS&quot;,Arial,&quot;lucida sans unicode&quot;,sans-serif; font-size: medium; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: normal; letter-spacing: normal; text-align: start; text-indent: 0px; text-transform: none; white-space: normal; word-spacing: 0px; text-decoration-style: initial; text-decoration-color: initial;"
 
 border="0"><colgroup><col style="text-align: left;"><col style="text-align: left;"><col
@@ -166,7 +170,7 @@ style="padding: 5px; font-size: 9pt; text-align: left; width: 79.2833px;">&lt;B&
 
 style="padding: 5px; font-size: 9pt; text-align: left; width: 69.5837px;">256</td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">256 bytes public key from AppleTV</td></tr><tr
+style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">256 bytes SRP6 public key from AppleTV</td></tr><tr
 
 style="background-color: rgb(241, 248, 253);"><td style="padding: 5px; font-size: 9pt; text-align: left;"><b>salt</b></td><td
 
@@ -191,22 +195,29 @@ bplist00.....RpkTsaltO....c.Li.4...L.............~....%k#..P2.5...G.U..Y..R..&lt
 color="#09598a"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
 
 size="3"><b>STEP
-              2 - run S</b><b>RP</b></font></font></font><font face="Segoe UI, sans-serif"><font
+              2 ("pair-setup-pin")- run S</b><b>RP</b></font></font></font><font face="Segoe UI, sans-serif"><font
 
 style="font-size: 12pt" size="3"><br><br>Generate
 locally
           a 32 bytes random <b>auth_secret</b>&nbsp;(named &lt;a&gt;)
           that will be used for all further verification with the AppleTV - DO
-          NOT LOOSE IT. </font></font>
+          NOT LOOSE IT.<br> </font></font>
     
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"
 
 lang="en-US">
-      <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">From
-that
-          secret, create a public key &lt;a_pub&gt; using a Ed25519
+      <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">The client will later need an ED25519
+	  public-private keypair, generated from a "cryptographically-safe" 32-byte random number (the "raw
+	  private key").   It is convenient  (but NOT necessary) to also use the SRP6 "ephemeral" secret &lt;a&gt; as
+	  the "raw private key" of the ED25519 keypair with public key &lt;a_pub&gt; used below.
+          <i>Note that true Apple clients maintain a persistent public key that does not change if
+	  the device is restarted</i>.
+	  <br><br>
+	  To create the public key &lt;a_pub&gt; using &lt;a&gt; (or any other saved  random 32 byte "raw"sequence),
+	  use a Ed25519
           (&nbsp;Edwards-curve Digital Signature Algorithm&nbsp;- EdDSA) – it
-          will be needed later, but can be re-created at any time.</font></font></p>
+          will be needed later, but can be re-created from the raw sequence at any time.: 
+    </font></font></p>
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm">
       <font color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 
@@ -424,7 +435,7 @@ style="padding: 5px; font-size: 9pt; text-align: left;">&lt;M1&gt;</td><td style
 style="padding: 5px; font-size: 9pt; text-align: left;"><font face="Segoe UI, sans-serif"><font
 
 style="font-size: 9pt" size="2">The
-                  SRP6 public key corresponding to &lt;a&gt; (A = g ^&lt;a&gt; %                  N).<br>
+                  M1 proof calculated by the client.<br>
                   Should be calculated by the SRP library</font></font></td></tr></tbody></table><p
 
 class="cli_srv" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(255, 204, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">client
@@ -453,11 +464,12 @@ style="color: #4381a7; font-variant: small-caps; font-size: 12pt; height: 30px; 
 
 style="background-color: rgb(241, 248, 253);"><td style="padding: 5px; font-size: 9pt; text-align: left;"><b>proof</b></td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left;">&lt;M2&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">64</td><td
+style="padding: 5px; font-size: 9pt; text-align: left;">&lt;M2&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">20</td><td
 
 style="padding: 5px; font-size: 9pt; text-align: left;"><font face="Segoe UI, sans-serif"><font
 
-style="font-size: 9pt" size="2">The M2 proof calculated by the server</font></font></td></tr></tbody>
+											    style="font-size: 9pt" size="2">The M2 proof calculated by the server
+	    Should be calculated using a SRP6 library</font></font></td></tr></tbody>
 </table><font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">This
 &lt;M2&gt;
           can be checked against the &lt;M2&gt; calculated by SRP
@@ -480,12 +492,14 @@ size="3"><b>STEP
               3 (run AES)</b></font></font></font><br><br><p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm"
 
 align="justify" lang="en-US">
-      <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">This
-last
-          step is to confirm the secret <b>auth_secret</b>&nbsp;&lt;a&gt;.
-          It requires a sha512 digest, and an AES encryption in GCM (Galois
-          Counter Mode, which provides encryption and signature). This builds an
-          encrypted message &lt;epk&gt; with its signed &lt;authTag&gt;. <br></font></font>
+	  <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3"> After Step 2, both client and
+	      server possess the SRP6 secret hash &lt;K&gt;, which enables them to exchange encrypted <b> and
+		authenticated </b> messages using AES encryption in CGM (Galois Counter Mode).<br><br>
+
+	      This last
+              step is to confirm the secret <b>auth_secret</b>&nbsp;&lt;a&gt;.
+              It requires a sha512 digest, and an AES encryption in GCM mode. This builds an
+              encrypted message &lt;epk&gt; with its signed &lt;authTag&gt;. <br></font></font>
         </p>
         <ol type="1"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 
@@ -503,7 +517,10 @@ size="3">
 face="Segoe UI, sans-serif">
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"><font
 
-face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">Build a
+											    face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">Note that it appears that in this communication mode, the AES key
+	  and IV used to encrypt and decrypt a message is updated (after decryption) by adding 0x01 to the last byte of the
+	  AES IV before encrypting the reply message.<br><br>
+	  Build a
           <b>plist:</b></font></font>
 </p></font><p><font color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
 
@@ -529,7 +546,7 @@ style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">Encrypte
 
 style="background-color: rgb(241, 248, 253);"><td style="padding: 5px; font-size: 9pt; text-align: left;"><b>authTag</b></td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left;">&lt;tag&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">64</td><td
+style="padding: 5px; font-size: 9pt; text-align: left;">&lt;tag&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">16</td><td
 
 style="padding: 5px; font-size: 9pt; text-align: left;"><font face="Segoe UI, sans-serif"><font
 
@@ -546,15 +563,34 @@ bplist00.....SepkWauthTagO. .p..^.......vLk.&amp;....&amp;.(A.].....O..K...sW.&a
 
 color="#09598a"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
 
-size="3"><span lang="en-US"></span></font></font></font><font face="Segoe UI, sans-serif"><p
-
+size="3"><span lang="en-US"></span></font></font></font><font face="Segoe UI, san-serif"><p
 class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"
-
-lang="en-US"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">If
-the
-          message is correct, the AppleTV should responds with a HTTP 200
-          and a <b>plist </b>which means that the <b>auth_secret</b> &lt;a&gt;
-          is now registered in the AppleTV as a valid secret<br></font></font></p></font><p><font
+	 lang="en-US"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3"> The
+	AppleTV (AirPlay server) then recreates
+	the AES key and IV used by the client, and uses them to decrypt &lt;epk&gt;,
+	with authentication by the &lt;authTag&gt;. Successful decryption both  authenticates the client,
+	and provides the server with the client's ED25519 public key.<br><br>	
+	If the
+        message is correct, the Apple TV updates the AES IV by adding 0x01 to the last byte, and encrypts 
+	its own public key as a &lt;epk&gt; plus &lt;authTag&gt;.  It then
+        responds with a HTTP 200
+        and a <b>plist </b> containing the server &lt;epk&gt; and &lt;authTag&gt;, which
+	means that  &lt;K&gt; (also known as the the <b>session key</b>)
+        is now registered in the AppleTV as a valid shared secret with the client.  <br><br>The client can then (optionally)
+	authenticate the server by using the AES key and (modified) IV to decrypt the server &lt;epk&gt; with
+	authentication by &lt;authTag&gt; (true Apple clients will not continue to the next step unless the server
+	&lt;epk&gt; passes this test).
+		(Provided the server
+        has correctly communicated its ED25519 public key to the client in a response
+	to an earlier a POST /GetInfo request from the client, and the client does not care about authentication of
+	the server, decryption by the client  of the server &lt;epk&gt; by the client can be skipped.)
+	<br><br>
+	    At the end of the SRP procedure, client and server each know the other's
+	ED25519 public key, which is all that is needed to pass to the next step ("pair-verify").
+	<br><br> <b> After pair-setup-pin has
+	successfully finished, the client will never have to repeat it, provided that the server ED25519 public key
+	has not changed.</b>.
+	<br></font></font></p></font><p><font
 
 color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 13pt"
 
@@ -576,21 +612,21 @@ style="padding: 5px; font-size: 9pt; text-align: left; width: 79.2833px;">&lt;ep
 
 style="padding: 5px; font-size: 9pt; text-align: left; width: 69.5837px;">32</td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">unused</td></tr><tr
+style="padding: 5px; font-size: 9pt; text-align: left; width: 375.7px;">Encrypted data (unused, can be used by client to authenticate server)</td></tr><tr
 
 style="background-color: rgb(241, 248, 253);"><td style="padding: 5px; font-size: 9pt; text-align: left;"><b>authTag</b></td><td
 
-style="padding: 5px; font-size: 9pt; text-align: left;">&lt;tag&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">64</td><td
+style="padding: 5px; font-size: 9pt; text-align: left;">&lt;tag&gt;</td><td style="padding: 5px; font-size: 9pt; text-align: left;">16</td><td
 
 style="padding: 5px; font-size: 9pt; text-align: left;"><font face="Segoe UI, sans-serif"><font
 
-style="font-size: 9pt" size="2">unused</font></font></td></tr></tbody>
+style="font-size: 9pt" size="2">Signature of data (unused,can be used by client to authenticate server)</font></font></td></tr></tbody>
 </table><font face="Segoe UI, sans-serif"><p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm"
 
 align="justify" lang="en-US">
-      <font face="Segoe UI, sans-serif"><font style="font-size: 13pt" size="3">These
-parameters
-          do not seem to be used later in the protocol</font></font></p></font><p
+      <font face="Segoe UI, sans-serif"><font style="font-size: 13pt" size="3">These parameters
+          are used only for the client to confirm the authentication of the server, and are
+	  never used again in the protocol</font></font></p></font><p
 
 class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p><pre
 
@@ -605,14 +641,63 @@ bplist00.....SepkWauthTagO. K.@O...E.&amp;ED...Q<br></code></pre><font face="Seg
 class="msonormal" style="margin-top: 0.66cm; margin-bottom: 0.4cm" lang="en-US">
       <span style="display: inline-block; border-top: none; border-bottom: 1.00pt solid #09598a; border-left: none; border-right: none; padding-top: 0cm; padding-bottom: 0.05cm; padding-left: 0cm; padding-right: 0cm"><font
 
+              face="Segoe UI, sans-serif"><font style="font-size: 18pt" size="5"><b><font
+
+	     color="#09598a">10.1a. RTSP pairing ("pair-setup" without pin, if the Server is not
+		password-protected)</font></b></font></font></span></p>
+
+        <p class="msonormal" style="margin-top: 0.26cm; margin-bottom: 0.5cm" lang="en-US"><font
+
+            color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
+
+								    size="3"><span lang="en-US">This is a
+		  simpler alternative pairing procedure that the client can use if the Server indicates that
+		  it is not password-protected  ("pw" = "false" in the DNS_SD announcement), but bit 27 in
+		  its "features" bitstring ("supports Legacy Pairing") is set.  (pair-setup can be skipped
+		  completely if bit 27 is unset and password-protection is "off".) <br><br>
+		  
+		  The </span></font></font></font><font
+
+            color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
+
+                size="3"><span lang="en-US"><b>pair-setup </b></span></font></font></font><font
+
+            color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
+
+                size="3"><span lang="en-US">POST reque</span></font></font></font><font
+
+            color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
+
+                size="3"><span lang="en-US">st starts the procedure</span></font></font></font>
+        </p>
+        <p class="cli_srv" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(255, 204, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">client
+          → server</p>
+        <pre style="background-color: rgb(239, 248, 253); border-right: 1px dashed rgb(170, 170, 170); border-bottom: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-top: none; padding: 5px; margin: 0px 10px 30px 30px; width: 650px; overflow: auto; font-weight: bold; color: rgb(0, 0, 0); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;"><code
+	    style="font-weight: bold;">POST /pair-setup RTSP/1.0
+Content-Length: 32
+Content-Type: application/octet-stream <br></code></pre><p class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p><pre			       style="background-color: rgb(239, 248, 253); border-right: 1px dashed rgb(170, 170, 170); border-bottom: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-top: none; padding: 5px; margin: 0px 10px 30px 30px; width: 650px; overflow: auto; font-weight: bold; color: rgb(0, 0, 0); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;"><code
+
+															style="font-weight: bold;">RTSP/1.0 200 OK
+Server: AirTunes/320.20
+Content-Type: application/octet-stream
+Content-Length: 32</code></pre><font color="#09598a"><font face="Segoe UI, sans-serif"><font
+
+style="font-size: 12pt" size="3"><br><br>The
+          <b>pair-setup</b> POST request is used to send the 32 byte client ED25519 public key
+          to the Apple TV (AirPlay server) as a binary message, and the server just reponds with its own public key.  .<br></font></font><font face="Segoe UI, sans-serif"><font
+																											   
 face="Segoe UI, sans-serif"><font style="font-size: 18pt" size="5"><b><font color="#09598a">10.2.
-                RTSP session authentication</font></b></font></font></span></p>
+                RTSP session authentication ("pair-verify")</font></b></font></font></span></p>
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"
 
 lang="en-US">
-      <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">Now,
-before
-          initialing any audio, video or exchange with the AppleTV, each
+      <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">At the
+	  beginning of this part of the protocol, the client and server (in principle)
+	  know each others ED25519 public keys. (Since the client will now again
+	  send its public key to the server, it is
+	  not even necessary that the server starts with this knowledge, unless it wishes to check if the client has
+	  previously completed the pair-setup-pin or pair-setup process.) <br><br> Now, before
+          initializing any audio, video or exchange with the AppleTV, each
           RTSP session must be authenticated. This means that after a TEARDOWN,
           the same protocol must happen again (only the authentication, not the
           pairing). The <b>auth_secret</b> &lt;a&gt; will now be used</font></font></p>
@@ -627,7 +712,7 @@ size="3"><b>STEP
       <font color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 
 size="3"><span lang="en-US">Generate
-              locally a random 32 bytes number and use a Curve25519 </span></font></font></font><a
+              locally a new random 32 bytes number and use a Curve25519 </span></font></font></font><a
 
 href="https://en.wikipedia.org/wiki/Elliptic_curve_Diffie%E2%80%93Hellman"><font
 
@@ -641,7 +726,13 @@ color="#000000"><font face="Segoe UI, sans-serif"><font style="font-size: 12pt"
 size="3"><span lang="en-US">&nbsp;(ECDH)
               algorithm to build a verifier key pair &lt;v_pub&gt; and
               &lt;v_priv&gt;
-              (32 bytes each). </span></font></font></font>
+              (32 bytes each).
+	      The Apple TV (AirPlay server) will likewise build &lt;atv_pub&gt; (and &lt;atv_priv&gt;,
+	      which will not be revealed to the client). With knowledge of either (&lt;v_priv&gt;, &lt;atv_pub&gt;)
+	      or (&lt;atv_priv&gt;,&lt;v_pub&gt;), an "ECDH secret" &lt;secret&gt; shared between client and server
+	      can be created.
+
+      </span></font></font></font>
     </p>
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"
 
@@ -650,7 +741,8 @@ lang="en-US">
 above,
           retrieve the public key &lt;a_pub&gt; from the <b>auth_secret</b>
           &lt;a&gt; using Ed25519 (Edwards-curve Digital Signature
-          Algorithm&nbsp;- EdDSA)</font></font></p>
+          Algorithm&nbsp;- EdDSA) <i>(Note: while this a valid way to derive &lt;a_pub&gt;, it may not be
+	  necessary for the client to use a  ED25519 public key &lt;a_pub&gt; derived using &lt;a&gt; as its raw private key; Apple devices appear to maintain a persitent (fixed) ED25519 public key).</i> </font></font></p>
     <p class="msonormal" style="margin-top: 0.08cm; margin-bottom: 0.4cm" align="justify"
 
 lang="en-US">
@@ -690,9 +782,12 @@ align="justify" lang="en-US">
       <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">The
 AppleTV
           responds with a body containing 96 bytes of data. Again, this is NOT
-          a <b>plist</b>, but just plain binary. The first 32 bytes are an AppleTV
-          public key &lt;atv_pub&gt; and the remaining bytes (usually 64) are
-          some data &lt;atv_data&gt; to be used in next step.</font></font></p></font><p
+          a <b>plist</b>, but just plain binary. The first 32 bytes are the AppleTV
+          public ECDH key &lt;atv_pub&gt; and the remaining 64 bytes, which will here be called
+          &lt;atv_data&gt; must be used in next step (these 64 bytes of &lt;atv_data&gt; are in fact
+	  the server's equivalent to the client &lt;signature&gt; described below, and they
+	  will be described at the end of the next section).
+</font></font></p></font><p
 
 class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p><pre
 
@@ -753,7 +848,16 @@ align="justify" lang="en-US">
       <font face="Segoe UI, sans-serif"><font style="font-size: 12pt" size="3">The
 AppleTV
           should respond with an HTTP/RTSP 200 and the session (socket)
-          is valid</font></font></p>
+          is valid.<br><br> The recipe used by the server to create &lt;atv_pub&gt; can now be given.
+	  It follows the same six steps as above,
+	  except that in step 2,  the server's &lt;signed&gt; uses the concatenation
+	  of &lt;atv_pub&gt; and &lt;v_pub&gt;
+	  which is in the opposite order from that used above by the client.   In step 5, there is nothing
+	  previously received by the server that corresponds to  &lt;atv_data&gt; so only the server's
+	  &lt;signed&gt; is encrypted to the 64 byte &lt;signature&gt;, using AES key and IV built as in steps 3 and 4.
+	  This server &lt;signature&gt; is exactly what the client knows as &lt;atv_data&gt; in step 5.
+
+  </font></font></p>
     </font><p class="srv_cli" style="margin: 10px 10px 0px 30px; text-align: justify; background-color: rgb(204, 255, 204); border-top: 1px dashed rgb(170, 170, 170); border-right: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-bottom: none; padding: 5px; width: 650px; overflow: auto; font-size: 12.8px; font-variant: small-caps; font-weight: bold; color: rgb(0, 0, 0); font-family: &quot;Segoe UI&quot;, &quot;Lucida Grande&quot;, &quot;Trebuchet MS&quot;, Arial, &quot;lucida sans unicode&quot;, sans-serif; font-style: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; white-space: normal; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;">server → client</p>
 <pre style="background-color: rgb(239, 248, 253); border-right: 1px dashed rgb(170, 170, 170); border-bottom: 1px dashed rgb(170, 170, 170); border-left: 1px dashed rgb(170, 170, 170); border-image: initial; border-top: none; padding: 5px; margin: 0px 10px 30px 30px; width: 650px; overflow: auto; font-weight: bold; color: rgb(0, 0, 0); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: start; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; text-decoration-style: initial; text-decoration-color: initial;"><code
 
