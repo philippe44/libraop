@@ -38,6 +38,11 @@ jobs:
           if [ "${{ matrix.os-arch }}" = "aarch64" ]; then
             export CC=aarch64-linux-gnu-gcc
             export CXX=aarch64-linux-gnu-g++
+          else
+            export CC=x86_64-linux-gnu-gcc
+            export CXX=x86_64-linux-gnu-g++
+            export CFLAGS="-march=x86-64"
+            export CXXFLAGS="-march=x86-64"
           fi
           make HOST=linux PLATFORM=${{ matrix.os-arch }} STATIC=1 -j$(nproc)
           chmod +x bin/cliraop-linux-${{ matrix.os-arch }}
