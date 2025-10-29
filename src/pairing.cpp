@@ -165,6 +165,8 @@ std::vector<uint8_t> computeM1(std::vector<uint8_t> pk, std::vector<uint8_t> sal
 	return M1;
 }
 
+extern "C" {
+
 bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSecret) {
 	char response[32] = { };
 	AppleTV *player = NULL;
@@ -226,7 +228,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 
 	kd_add(headers, "Connection", "keep-alive");
 	kd_add(headers, "Content-Type", "application/octet-stream");
-	
+
 	char *buffer = http_send(sock, "POST /pair-pin-start HTTP/1.1", headers);
 	//printf("%s", buffer);
 	NFREE(buffer);
@@ -412,3 +414,5 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 	if (!mDNShandle) mdnssd_close(mDNS);
 	return true;
 }
+
+} // extern "C"

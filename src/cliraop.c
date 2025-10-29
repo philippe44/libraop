@@ -13,7 +13,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
-#include "platform.h"
+#include "../crosstools/src/platform.h"
 #include <assert.h>
 
 #include <sys/stat.h>
@@ -32,13 +32,14 @@
 #endif
 #endif
 
-#include "cross_thread.h"
+#include "../crosstools/src/cross_thread.h"
 #include "raop_client.h"
-#include "cross_net.h"
-#include "cross_ssl.h"
+#include "../crosstools/src/cross_net.h"
+#include "../crosstools/src/cross_ssl.h"
 #include "cross_util.h"
 #include "cross_log.h"
 #include "http_fetcher.h"
+#include "pairing.h"
 
 #define RAOP_SEC(ntp) ((uint32_t)((ntp) >> 32))
 #define RAOP_FRAC(ntp) ((uint32_t)(ntp))
@@ -123,6 +124,7 @@ static int print_usage(char *argv[])
 
 		   "\t[-if <ipaddress>] (IP of the interface to bind to)\n"
 
+		   "\t[-pair] enter pairing mode for AppleTV\n"
 		   "\t[-debug <debug level>] (0 = silent)\n",
 		   name);
 	return -1;
@@ -324,28 +326,34 @@ int main(int argc, char *argv[])
 	int i, n = -1, level = 3;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	uint64_t start = 0, start_at = 0, last = 0, frames = 0;
-	bool alac = false, encryption = false, auth = false;
+	bool alac = false, encryption = false, auth = false, pairing_mode = false;
 	char *passwd = "", *secret = "", *md = "0,1,2", *et = "0,4", *am = "", *pk = "", *pw = "";
 	char *iface = NULL;
 	uint32_t glNetmask;
 	char glInterface[16] = "?";
 	static struct in_addr glHost;
+	char *pair_udn = NULL;
+	char *pair_secret = NULL;
 
 	// parse arguments
 	for (i = 1; i < argc; i++)
 	{
-		if (!strcmp(argv[i], "-ntp"))
+		if (!strcmp(argv[i], "-pair"))
+		{
+			pairing_mode = true;
+		}
+		else if (!strcmp(argv[i], "-ntp"))
 		{
 			uint64_t t = raopcl_get_ntp(NULL);
 			printf("%" PRIu64 "\n", t);
 			exit(0);
 		}
-		if (!strcmp(argv[i], "-check"))
+		else if (!strcmp(argv[i], "-check"))
 		{
 			printf("cliraop check\n");
 			exit(0);
 		}
-		if (!strcmp(argv[i], "-port"))
+		else if (!strcmp(argv[i], "-port"))
 		{
 			player.port = atoi(argv[++i]);
 		}
@@ -446,6 +454,23 @@ int main(int argc, char *argv[])
 	glHost = get_interface(!strchr(glInterface, '?') ? glInterface : NULL, &iface, &glNetmask);
 	LOG_INFO("Binding to %s [%s] with mask 0x%08x", inet_ntoa(glHost), iface, ntohl(glNetmask));
 	NFREE(iface);
+
+	if (pairing_mode)
+	{
+		// Initialize platform/SSL for pairing
+		netsock_init();
+		cross_ssl_load();
+
+		if (AppleTVpairing(NULL, &pair_udn, &pair_secret))
+		{
+			printf("\nPairing successful!\nUDN: %s\nSecret: %s\n", pair_udn ? pair_udn : "(none)", pair_secret ? pair_secret : "(none)");
+		}
+		else
+		{
+			printf("Pairing failed.\n");
+		}
+		exit(0);
+	}
 
 	if (!player.hostname)
 		return print_usage(argv);

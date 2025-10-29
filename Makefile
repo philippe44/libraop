@@ -34,14 +34,15 @@ vpath %.c $(TOOLS):$(SRC):$(DMAP_PARSER):$(FETCHER)/src
 vpath %.cpp $(TOOLS):$(SRC):$(FETCHER)/src
 
 INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
-	  -I$(TOOLS) \
-	  -I$(DMAP_PARSER) \
-	  -I$(MDNS)/include/mdnssvc -I$(MDNS)/include/mdnssd \
-	  -I$(OPENSSL)/include \
-	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac \
-	  -I$(CODECS)/include/shine -I$(CODECS)/include/faac \
-	  -I$(SRC) -I$(SRC)/inc \
-	  -I$(FETCHER)/include
+	-I$(TOOLS) \
+	-I$(DMAP_PARSER) \
+	-I$(MDNS)/include/mdnssvc -I$(MDNS)/include/mdnssd \
+	-I$(OPENSSL)/include \
+	-I$(CODECS)/include/addons -I$(CODECS)/include/flac \
+	-I$(CODECS)/include/shine -I$(CODECS)/include/faac \
+	-I$(SRC) -I$(SRC)/inc \
+	-I$(FETCHER)/include \
+	-Icrosstools/src
 
 CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
                      ed25519_sign.c ed25519_verify.c \
@@ -53,10 +54,17 @@ SOURCES = raop_client.c rtsp_client.c \
 	  alac.c \
 	  http_fetcher.c http_error_codes.c
 
-SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c
+SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c pairing.cpp bplist.cpp
+ifndef CXX
+	CXX = g++
+endif
+CXXFLAGS ?= -Wall -O2 -std=c++17
 
 OBJECTS = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES)))
 OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES)))
+
+OBJECTS_BIN = $(patsubst %.c,$(BUILDDIR)/%.o,$(filter %.c,$(SOURCES_BIN)))
+OBJECTS_BIN += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES_BIN)))
 
 LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a $(MDNS)/$(HOST)/$(PLATFORM)/libmdns.a
 
@@ -71,8 +79,8 @@ directory:
 	@mkdir -p lib/$(HOST)/$(PLATFORM)
 	@mkdir -p $(BUILDDIR)
 
-$(EXECUTABLE): $(SOURCES_BIN:%.c=$(BUILDDIR)/%.o) $(LIB)
-	$(CC) $^ $(LIBRARY) $(CFLAGS) $(LDFLAGS) -o $@
+$(EXECUTABLE): $(OBJECTS_BIN) $(LIB)
+	$(CXX) $(OBJECTS_BIN) $(LIB) $(LIBRARY) $(LDFLAGS) -o $@
 ifeq ($(HOST),macos)
 	rm -f $(CORE)
 	lipo -create -output $(CORE) $$(ls $(CORE)* | grep -v '\-static')
