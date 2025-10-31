@@ -132,13 +132,16 @@ extern "C" {
 bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const char *target_ip, int port) {
 	// make sure we can safely free these
 	A = a = NULL;
+	bool success = false;
 
 	if (!target_ip || !*target_ip) {
-		printf("Error: IP address is required for pairing\n");
+		fprintf(stderr, "Error: IP address is required for pairing\n");
+		fflush(stderr);
 		return false;
 	}
 
-	printf("Pairing with device at %s:%d\n", target_ip, port);
+	fprintf(stderr, "Pairing with device at %s:%d\n", target_ip, port);
+	fflush(stderr);
 
 	struct sockaddr_in peer = { };
 	key_data_t headers[16] = { };
@@ -154,6 +157,11 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 	kd_add(headers, "Content-Type", "application/octet-stream");
 
 	char *buffer = http_send(sock, "POST /pair-pin-start HTTP/1.1", headers);
+	if (!buffer) {
+		kd_free(headers);
+		closesocket(sock);
+		return false;
+	}
 	//printf("%s", buffer);
 	NFREE(buffer);
 	kd_free(headers);
@@ -172,7 +180,8 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 	if (1) {
 #endif
 		char pin[5];
-		printf("enter PIN code displayed on AppleTV: ");
+		fprintf(stderr, "enter PIN code displayed on AppleTV:\n");
+		fflush(stderr);
 #ifndef TEST_VECTOR
 		(void)!scanf("%4s", pin);
 #else
@@ -196,9 +205,15 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 		kd_vadd(headers, "Content-Length", "%zu", data.size());
 
 		char* httpStr = http_send(sock, "POST /pair-setup-pin HTTP/1.1", headers);
+		if (!httpStr) {
+			kd_free(headers);
+			closesocket(sock);
+			return false;
+		}
 		send(sock, (const char*) data.data(), data.size(), 0);
 		//printf("%s", httpStr);
-		printf("step1 ... verifying pin\n");
+		fprintf(stderr, "step1 ... verifying pin\n");
+		fflush(stderr);
 		NFREE(httpStr);
 		kd_free(headers);
 
@@ -234,8 +249,14 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 			kd_vadd(headers, "Content-Length", "%zu", data.size());
 
 			char* httpStr = http_send(sock, "POST /pair-setup-pin HTTP/1.1", headers);
+			if (!httpStr) {
+				kd_free(headers);
+				closesocket(sock);
+				return false;
+			}
 			send(sock, (const char*)data.data(), data.size(), 0);
-			printf("step2 ... verifying M1\n");
+			fprintf(stderr, "step2 ... verifying M1\n");
+			fflush(stderr);
 			//printf("%s", httpStr);
 			NFREE(httpStr);
 			kd_free(headers);
@@ -304,9 +325,15 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 				kd_vadd(headers, "Content-Length", "%zu", data.size());
 
 				char* httpStr = http_send(sock, "POST /pair-setup-pin HTTP/1.1", headers);
+				if (!httpStr) {
+					kd_free(headers);
+					closesocket(sock);
+					return false;
+				}
 				send(sock, (const char*)data.data(), data.size(), 0);
 				//printf("%s", httpStr);
-				printf("step3 ... verifying AES\n");
+				fprintf(stderr, "step3 ... verifying AES\n");
+				fflush(stderr);
 				NFREE(httpStr);
 				kd_free(headers);
 
@@ -320,24 +347,31 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 				if (1) {
 #endif
 
-					printf("success!\nsecret is %s\n", *pSecret);
+					fprintf(stderr, "success!\nsecret is %s\n", *pSecret);
+					fflush(stderr);
+					success = true;
 				} else {
-					printf("can't authentify, error %s", resource);
+					fprintf(stderr, "can't authentify, error %s\n", resource);
+					fflush(stderr);
 				}
 			}
 		} else {
-			printf("pin failed %s", resource);
+			fprintf(stderr, "pin failed %s\n", resource);
+			fflush(stderr);
 		}
 
 		NFREE(body);
-	} 
+	} else {
+		fprintf(stderr, "device did not respond to pairing request\n");
+		fflush(stderr);
+	}
 
 	if (a) BN_free(a);
 	if (A) BN_free(A);
 
 	kd_free(headers);
 	if (sock != -1) closesocket(sock);
-	return true;
+	return success;
 }
 
 } // extern "C"

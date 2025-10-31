@@ -1009,8 +1009,8 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	// RTSP pairing verify for AppleTV
 	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
 
-	// Send pubkey for MFi devices
-	if (strchr(p->et, '4')) rtspcl_auth_setup(p->rtspcl);
+	// Send pubkey for MFi devices (but not if we already did pair-verify)
+	if (strchr(p->et, '4') && !*p->secret) rtspcl_auth_setup(p->rtspcl);
 
 	// build sdp parameter
 	buf = strdup(inet_ntoa(peer));

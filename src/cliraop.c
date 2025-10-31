@@ -528,11 +528,13 @@ int main(int argc, char *argv[])
 
 		if (AppleTVpairing(NULL, &pair_secret, player.hostname, player.port))
 		{
-			printf("\nPairing successful!\nSecret: %s\n", pair_secret ? pair_secret : "(none)");
+			fprintf(stderr, "\nPairing successful!\nSecret: %s\n", pair_secret ? pair_secret : "(none)");
+			fflush(stderr);
 		}
 		else
 		{
-			printf("Pairing failed.\n");
+			fprintf(stderr, "Pairing failed.\n");
+			fflush(stderr);
 		}
 		exit(0);
 	}
