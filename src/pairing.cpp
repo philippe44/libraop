@@ -174,7 +174,19 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 
 	// request a PIN code to be displayed on ATV
 #ifndef TEST_VECTOR
-	if (http_parse(sock, method, resource, NULL, headers, NULL, &len) && strcasestr(resource, "200")) {
+	fprintf(stderr, "waiting for device to show PIN code...\n");
+	fflush(stderr);
+
+	// Device needs time to show prompt and display PIN, retry up to 10 seconds
+	bool parse_result = false;
+	for (int retry = 0; retry < 20 && !parse_result; retry++) {
+		parse_result = http_parse(sock, method, resource, NULL, headers, NULL, &len);
+		if (!parse_result && retry < 19) {
+			usleep(500000); // 500ms between retries = 10 seconds total
+		}
+	}
+
+	if (parse_result && strcasestr(resource, "200")) {
 		kd_free(headers);
 #else
 	if (1) {
@@ -362,7 +374,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const ch
 
 		NFREE(body);
 	} else {
-		fprintf(stderr, "device did not respond to pairing request\n");
+		fprintf(stderr, "device did not respond to pairing request (response: %s)\n", resource);
 		fflush(stderr);
 	}
 
