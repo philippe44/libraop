@@ -12,13 +12,13 @@
 #include <string.h>
 #include <ctype.h>
 #include <openssl/rand.h>
-
-#ifdef USE_CURVE25519
-#include "ed25519_signature.h"
-#else
 #include <openssl/evp.h>
 #include <openssl/sha.h>
 #include <openssl/md5.h>
+
+#ifdef USE_CURVE25519
+#include "ed25519_signature.h"
+#include "curve25519_dh.h"
 #endif
 
 #include "platform.h"

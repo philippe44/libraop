@@ -42,44 +42,6 @@ static BIGNUM* A, * a;
 static char K[20*2];
 static uint8_t scratch[1024];
 
-typedef struct {
-	std::string UDN;
-	struct in_addr addr;
-	uint16_t port;
-} AppleTV;
-
-static uint32_t netmask;
-static std::vector<AppleTV> ATV;
-
-/*----------------------------------------------------------------------------*/
-static std::string GetmDNSAttribute(mdnssd_txt_attr_t* p, int count, const char* name) {
-	std::string value;
-	for (int i = 0; i < count; i++)	if (!strcasecmp(p[i].name, name)) {
-		value = p[i].value;
-		std::transform(value.begin(), value.end(), value.begin(),
-			[](unsigned char c) { return std::tolower(c); }
-		);
-		break;
-	}
-	return value;
-}
-
-/*----------------------------------------------------------------------------*/
-static bool searchCallback(mdnssd_service_t* slist, void* cookie, bool* stop) {
-	for (mdnssd_service_t* s = slist; s; s = s->next) {
-		if (!s->name || (s->host.s_addr != s->addr.s_addr && ((s->host.s_addr & netmask) == (s->addr.s_addr & netmask)))) continue;
-
-		auto am = GetmDNSAttribute(s->attr, s->attr_count, "am");
-		auto pk = GetmDNSAttribute(s->attr, s->attr_count, "pk");
-
-		if (am.find("appletv") != std::string::npos && !pk.empty()) {
-			ATV.push_back({ s->name, s->addr, s->port });
-		}
-	}
-
-	return false;
-}
-
 std::vector<uint8_t> computeM1(std::vector<uint8_t> pk, std::vector<uint8_t> salt, char* user, char* passwd) {
 	// initialize SRP context
 	SRP_gN* gN = SRP_get_default_gN("2048");
@@ -167,62 +129,24 @@ std::vector<uint8_t> computeM1(std::vector<uint8_t> pk, std::vector<uint8_t> sal
 
 extern "C" {
 
-bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSecret) {
-	char response[32] = { };
-	AppleTV *player = NULL;
-	struct mdnssd_handle_s* mDNS = mDNShandle;
-	ATV.clear();
-
-	if (!mDNS) {
-		struct in_addr host = get_interface(NULL, NULL, &netmask);
-		mDNS = mdnssd_init(false, host, true);
-		if (!mDNS) return false;
-	}
-
-	// search for AppleTV
-	printf("please wait 5 seconds...\n");
-	mdnssd_query(mDNS, "_raop._tcp.local", false, 5, &searchCallback, NULL);
-	
+bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pSecret, const char *target_ip, int port) {
 	// make sure we can safely free these
 	A = a = NULL;
 
-	// list devices
-	printf("\npick an AppleTV or type \"exit\" to leave pairing mode\n\n");
-	for (auto &device : ATV) {
-		printf("%-15s => %s\n", inet_ntoa(device.addr), device.UDN.c_str());
+	if (!target_ip || !*target_ip) {
+		printf("Error: IP address is required for pairing\n");
+		return false;
 	}
 
-	printf("\nIP address: ");
-#ifndef TEST_VECTOR
-	(void)!scanf("%16s", response);
-#else
-	strcpy(response, "192.168.10.37");
-#endif
-	if (!strcasecmp(response, "exit")) return false;
+	printf("Pairing with device at %s:%d\n", target_ip, port);
 
 	struct sockaddr_in peer = { };
-	std::string udn;
 	key_data_t headers[16] = { };
 	int sock = -1;
 
 	peer.sin_family = AF_INET;
-	peer.sin_addr.s_addr = inet_addr(response);
-
-	// find the device in connected one
-	for (auto& device : ATV) {
-		if (device.addr.s_addr == peer.sin_addr.s_addr) {
-			player = &device;
-			break;
-		}
-	}
-
-	// just return to caller if device not found
-	if (!player) {
-		if (!mDNShandle) mdnssd_close(mDNS);
-		return true;
-	}
-
-	peer.sin_port = htons(player->port);
+	peer.sin_addr.s_addr = inet_addr(target_ip);
+	peer.sin_port = htons(port > 0 ? port : 7000);
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (!tcp_connect(sock, peer)) return false;
 
@@ -255,8 +179,11 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 		strcpy(pin, "1234");
 #endif
 
+		// Generate UDN from IP address
 		char UDN[16 + 1] = { };
-		sscanf(player->UDN.c_str(), "%16[^@]", UDN);
+		snprintf(UDN, sizeof(UDN), "%02X%02X%02X%02X%02X%02X%02X%02X",
+			target_ip[0], target_ip[1], target_ip[2], target_ip[3],
+			target_ip[4], target_ip[5], target_ip[6], target_ip[7]);
 
 		bplist list;
 		list.add(2, "method", bplist::STRING, "pin",
@@ -388,7 +315,6 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 					kd_free(headers);
 					auto a_hex = BN_bn2hex(a);
 					*pSecret = strdup(a_hex);
-					if (pUDN) *pUDN = strdup(player->UDN.c_str());
 					OPENSSL_free(a_hex);
 #else
 				if (1) {
@@ -411,7 +337,6 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 
 	kd_free(headers);
 	if (sock != -1) closesocket(sock);
-	if (!mDNShandle) mdnssd_close(mDNS);
 	return true;
 }
 

@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "../crosstools/src/platform.h"
 #include <assert.h>
 
@@ -56,7 +57,7 @@ bool startsWith(const char *pre, const char *str)
 static bool glMainRunning = true;
 static pthread_t glCmdPipeReaderThread;
 char cmdPipeName[32];
-int cmdPipeFd;
+int cmdPipeFd = -1;
 char cmdPipeBuf[512];
 int latency = MS2TS(1000, 44100);
 struct raopcl_s *raopcl;
@@ -66,6 +67,7 @@ enum
 	PAUSED,
 	PLAYING
 } status;
+double skip_seconds = 0.0;  // seconds to skip for late joiners
 
 // debug level from tools & other elements
 log_level util_loglevel;
@@ -107,9 +109,11 @@ static int print_usage(char *argv[])
 		   "\t[-latency <latency> (frames]\n"
 		   "\t[-wait <wait>]  (start after <wait> milliseconds)\n"
 		   "\t[-ntpstart <start>] (start at NTP <start> + <wait>)\n"
+		   "\t[-skip <seconds>] (skip N seconds of audio for late joiners)\n"
 		   "\t[-encrypt] audio payload encryption\n"
 		   "\t[-dacp <dacp_id>] (DACP id)\n"
 		   "\t[-activeremote <activeremote_id>] (Active Remote id)\n"
+		   "\t[-cmdpipe <path>] (optional named pipe for metadata/commands)\n"
 		   "\t[-alac] send ALAC compressed audio\n"
 
 		   "\t[-et <value>] (et in mDNS: 4 for airport-express and used to detect MFi)\n"
@@ -124,7 +128,7 @@ static int print_usage(char *argv[])
 
 		   "\t[-if <ipaddress>] (IP of the interface to bind to)\n"
 
-		   "\t[-pair] enter pairing mode for AppleTV\n"
+		   "\t[-pair] enter pairing mode for AppleTV (use with <player_ip>, default port 7000)\n"
 		   "\t[-debug <debug level>] (0 = silent)\n",
 		   name);
 	return -1;
@@ -147,7 +151,19 @@ static void close_platform()
 /*----------------------------------------------------------------------------*/
 static void *CmdPipeReaderThread(void *args)
 {
-	cmdPipeFd = open(cmdPipeName, O_RDONLY);
+	// Open with O_NONBLOCK to avoid blocking when no writer is connected yet
+	cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
+	if (cmdPipeFd < 0) {
+		LOG_ERROR("Failed to open command pipe: %s", cmdPipeName);
+		return NULL;
+	}
+
+	// Set back to blocking mode after opening
+	int file_flags = fcntl(cmdPipeFd, F_GETFL);
+	fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
+
+	LOG_INFO("Command pipe opened: %s", cmdPipeName);
+
 	struct
 	{
 		char *title;
@@ -163,8 +179,12 @@ static void *CmdPipeReaderThread(void *args)
 		if (!glMainRunning)
 			break;
 
-		if (read(cmdPipeFd, cmdPipeBuf, 512) > 0)
+		int bytesRead = read(cmdPipeFd, cmdPipeBuf, sizeof(cmdPipeBuf) - 1);
+		if (bytesRead > 0)
 		{
+			// Null-terminate the buffer
+			cmdPipeBuf[bytesRead] = '\0';
+
 			// read lines
 			char *save_ptr1, *save_ptr2;
 			char *line = strtok_r(cmdPipeBuf, "\n", &save_ptr1);
@@ -295,8 +315,30 @@ static void *CmdPipeReaderThread(void *args)
 			// clear cmdPipeBuf
 			memset(cmdPipeBuf, 0, sizeof cmdPipeBuf);
 		}
+		else if (bytesRead == 0)
+		{
+			// EOF - writer has disconnected, need to re-open pipe for next writer
+			LOG_INFO("Command pipe writer disconnected, re-opening pipe...");
+			close(cmdPipeFd);
+
+			// Re-open with O_NONBLOCK to avoid blocking
+			cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
+			if (cmdPipeFd < 0)
+			{
+				LOG_ERROR("Failed to re-open command pipe: %s", cmdPipeName);
+				break;
+			}
+
+			// Set back to blocking mode for reads
+			int file_flags = fcntl(cmdPipeFd, F_GETFL);
+			fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
+
+			// Small sleep to avoid tight loop if open/close is rapid
+			usleep(10 * 1000);  // 10ms
+		}
 		else
 		{
+			// Error reading - sleep and retry
 			usleep(250 * 1000);
 		}
 	}
@@ -310,6 +352,7 @@ int main(int argc, char *argv[])
 	char *glDACPid = "1A2B3D4EA1B2C3D4";
 	char *activeRemote = "ap5918800d";
 	char *fname = NULL;
+	char *cmdpipe = NULL;
 	int volume = 0, wait = 0;
 	struct
 	{
@@ -332,7 +375,6 @@ int main(int argc, char *argv[])
 	uint32_t glNetmask;
 	char glInterface[16] = "?";
 	static struct in_addr glHost;
-	char *pair_udn = NULL;
 	char *pair_secret = NULL;
 
 	// parse arguments
@@ -384,6 +426,14 @@ int main(int argc, char *argv[])
 		else if (!strcmp(argv[i], "-activeremote"))
 		{
 			activeRemote = argv[++i];
+		}
+		else if (!strcmp(argv[i], "-cmdpipe"))
+		{
+			cmdpipe = argv[++i];
+		}
+		else if (!strcmp(argv[i], "-skip"))
+		{
+			skip_seconds = atof(argv[++i]);
 		}
 		else if (!strcmp(argv[i], "-alac"))
 		{
@@ -457,13 +507,28 @@ int main(int argc, char *argv[])
 
 	if (pairing_mode)
 	{
+		if (!player.hostname)
+		{
+			printf("Error: IP address is required for pairing.\n");
+			printf("Usage: %s -pair [-port <port>] <player_ip>\n", argv[0]);
+			printf("Example: %s -pair 192.168.1.69\n", argv[0]);
+			printf("Example: %s -pair -port 7000 192.168.1.69\n", argv[0]);
+			exit(1);
+		}
+
+		// Default port for pairing is 7000 if not specified
+		if (player.port == 5000)
+		{
+			player.port = 7000;
+		}
+
 		// Initialize platform/SSL for pairing
 		netsock_init();
 		cross_ssl_load();
 
-		if (AppleTVpairing(NULL, &pair_udn, &pair_secret))
+		if (AppleTVpairing(NULL, &pair_secret, player.hostname, player.port))
 		{
-			printf("\nPairing successful!\nUDN: %s\nSecret: %s\n", pair_udn ? pair_udn : "(none)", pair_secret ? pair_secret : "(none)");
+			printf("\nPairing successful!\nSecret: %s\n", pair_secret ? pair_secret : "(none)");
 		}
 		else
 		{
@@ -481,11 +546,52 @@ int main(int argc, char *argv[])
 	{
 		infile = fileno(stdin);
 	}
-	else if ((infile = open(fname, O_RDONLY)) == -1)
+	else
 	{
-		LOG_ERROR("cannot open file %s", fname);
-		close_platform();
-		exit(1);
+		struct stat st;
+		bool is_fifo = false;
+
+		// Check if file exists and is a FIFO
+		if (stat(fname, &st) == 0)
+		{
+			if (S_ISFIFO(st.st_mode))
+			{
+				is_fifo = true;
+				LOG_INFO("Using existing audio pipe: %s", fname);
+			}
+		}
+		else
+		{
+			// File doesn't exist - try to create it as a FIFO
+			LOG_INFO("Creating audio pipe: %s", fname);
+			if (mkfifo(fname, 0666) == 0)
+			{
+				is_fifo = true;
+			}
+			else
+			{
+				// Not a FIFO and couldn't create - will try to open as regular file
+				LOG_WARN("Could not create FIFO, trying as regular file: %s", fname);
+			}
+		}
+
+		// Open with O_NONBLOCK for FIFOs to avoid blocking on open
+		int flags = O_RDONLY;
+		if (is_fifo) flags |= O_NONBLOCK;
+
+		if ((infile = open(fname, flags)) == -1)
+		{
+			LOG_ERROR("cannot open file %s", fname);
+			close_platform();
+			exit(1);
+		}
+
+		// If it was a FIFO, set it back to blocking mode for reads
+		if (is_fifo)
+		{
+			int file_flags = fcntl(infile, F_GETFL);
+			fcntl(infile, F_SETFL, file_flags & ~O_NONBLOCK);
+		}
 	}
 
 	// get player's address
@@ -503,10 +609,27 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	// setup named pipe for metadata/commands
-	snprintf(cmdPipeName, sizeof(cmdPipeName), "/tmp/raop-%s", activeRemote);
-	LOG_INFO("Listening for commands on named pipe %s", cmdPipeName);
-	mkfifo(cmdPipeName, 0666);
+	// setup named pipe for metadata/commands (only if -cmdpipe is specified)
+	if (cmdpipe)
+	{
+		struct stat st;
+		strncpy(cmdPipeName, cmdpipe, sizeof(cmdPipeName) - 1);
+		cmdPipeName[sizeof(cmdPipeName) - 1] = '\0';
+
+		// Only create the FIFO if it doesn't exist
+		if (stat(cmdPipeName, &st) != 0)
+		{
+			LOG_INFO("Creating command pipe: %s", cmdPipeName);
+			if (mkfifo(cmdPipeName, 0666) != 0)
+			{
+				LOG_ERROR("Failed to create command pipe: %s", cmdPipeName);
+			}
+		}
+		else
+		{
+			LOG_INFO("Using existing command pipe: %s", cmdPipeName);
+		}
+	}
 
 	// init platform, initializes stdin
 	init_platform();
@@ -560,6 +683,15 @@ int main(int argc, char *argv[])
 
 	latency = raopcl_latency(raopcl);
 
+	// start the command/metadata reader thread BEFORE printing "connected to"
+	// so that the pipe reader is ready when Python tries to open the write side
+	if (cmdpipe)
+	{
+		pthread_create(&glCmdPipeReaderThread, NULL, CmdPipeReaderThread, NULL);
+		// Give the thread a moment to open the pipe
+		usleep(50 * 1000);  // 50ms
+	}
+
 	LOG_INFO("connected to %s on port %d, player latency is %d ms", inet_ntoa(player.addr),
 			 player.port, (int)TS2MS(latency, raopcl_sample_rate(raopcl)));
 
@@ -567,17 +699,35 @@ int main(int argc, char *argv[])
 	{
 		uint64_t now = raopcl_get_ntp(NULL);
 
-		start_at = (start ? start : now) + MS2NTP(wait) -
-				   TS2NTP(latency, raopcl_sample_rate(raopcl));
+		// For late joiners, we need different logic:
+		// - Start immediately (don't wait) to avoid blocking Python
+		// - Offset RTP timestamp to match original players
+		if (skip_seconds > 0)
+		{
+			// Late joiner calculation:
+			// - Use the ORIGINAL start time (not 'now')
+			// - Add the skip offset for RTP timestamp sync
+			// - Subtract latency as normal
+			// - Do NOT add 'wait' (start immediately)
+			uint64_t skip_ntp = MS2NTP((uint32_t)(skip_seconds * 1000));
+			start_at = start + skip_ntp - TS2NTP(latency, raopcl_sample_rate(raopcl));
 
-		LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", RAOP_SECNTP(now), RAOP_SECNTP(start_at),
-				 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ? (uint32_t)NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) : 0);
+			LOG_INFO("Late joiner: original start %u.%u + skip %.2fs - latency = start_at %u.%u",
+					 RAOP_SECNTP(start), skip_seconds, RAOP_SECNTP(start_at));
+			LOG_INFO("now %u.%u, will start immediately (start_at is in the past)", RAOP_SECNTP(now));
+		}
+		else
+		{
+			// Normal start: use original timing with wait parameter
+			start_at = (start ? start : now) + MS2NTP(wait) -
+					   TS2NTP(latency, raopcl_sample_rate(raopcl));
+
+			LOG_INFO("now %u.%u, audio starts at NTP %u.%u (in %u ms)", RAOP_SECNTP(now), RAOP_SECNTP(start_at),
+					 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ? (uint32_t)NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) : 0);
+		}
 
 		raopcl_start_at(raopcl, start_at);
 	}
-
-	// start the command/metadata reader thread
-	pthread_create(&glCmdPipeReaderThread, NULL, CmdPipeReaderThread, NULL);
 
 	start = raopcl_get_ntp(NULL);
 	status = PLAYING;
@@ -611,11 +761,35 @@ int main(int argc, char *argv[])
 		}
 
 		// send chunk if needed
-		if (status == PLAYING && raopcl_accept_frames(raopcl))
+		bool can_accept = raopcl_accept_frames(raopcl);
+
+		// Debug logging: track accept/reject patterns
+		static int consecutive_rejects = 0;
+
+		if (status == PLAYING && !can_accept)
+		{
+			consecutive_rejects++;
+		}
+		else if (status == PLAYING && can_accept)
+		{
+			if (consecutive_rejects > 500)  // Log if buffer was full for >500ms
+			{
+				LOG_WARN("Buffer was full for %.1f seconds (rejected %d times)",
+					consecutive_rejects / 1000.0, consecutive_rejects);
+			}
+			consecutive_rejects = 0;
+		}
+
+		if (status == PLAYING && can_accept)
 		{
 			n = read(infile, buf, DEFAULT_FRAMES_PER_CHUNK * 4);
+
 			if (!n)
+			{
+				// EOF or no writer on FIFO yet - sleep to avoid busy-waiting
+				usleep(10000);  // 10ms
 				continue;
+			}
 
 			raopcl_send_chunk(raopcl, buf, n / 4, &playtime);
 			frames += n / 4;
@@ -631,13 +805,24 @@ int main(int argc, char *argv[])
 	glMainRunning = false;
 	free(buf);
 	raopcl_disconnect(raopcl);
-	pthread_join(glCmdPipeReaderThread, NULL);
+
+	// Clean up command pipe thread if it was created
+	if (cmdpipe)
+	{
+		pthread_join(glCmdPipeReaderThread, NULL);
+	}
 	goto exit;
 
 exit:
 	LOG_INFO("exiting...");
-	close(cmdPipeFd);
-	unlink(cmdPipeName);
+
+	// Clean up command pipe if it was created
+	if (cmdPipeFd >= 0)
+	{
+		close(cmdPipeFd);
+		unlink(cmdPipeName);
+	}
+
 	raopcl_destroy(raopcl);
 	close_platform();
 	return 0;
