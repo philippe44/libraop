@@ -489,9 +489,7 @@ bool raopcl_accept_frames(struct raopcl_s *p)
 	if (p->pause_ts) now_ts = p->pause_ts;
 	else now_ts = NTP2TS(raopcl_get_ntp(NULL), p->sample_rate);
 
-	// Accept frames if current buffer level hasn't exceeded the target latency
-	// This allows continuous reading to maintain buffer, not just one chunk at a time
-	if (p->head_ts < now_ts + raopcl_latency(p)) accept = true;
+	if (now_ts >= p->head_ts + p->chunk_len) accept = true;
 
 	pthread_mutex_unlock(&p->mutex);
 
