@@ -38,15 +38,31 @@ jobs:
           if [ "${{ matrix.os-arch }}" = "aarch64" ]; then
             export CC=aarch64-linux-gnu-gcc
             export CXX=aarch64-linux-gnu-g++
+            # Ensure standard libraries are statically linked
+            export LDFLAGS="-static-libgcc -static-libstdc++"
           else
             export CC=x86_64-linux-gnu-gcc
             export CXX=x86_64-linux-gnu-g++
-            export CFLAGS="-march=x86-64"
-            export CXXFLAGS="-march=x86-64"
+            # Use baseline x86-64 with generic tuning for maximum compatibility
+            # -static-libgcc -static-libstdc++ ensure stdlib is statically linked
+            export CFLAGS="-march=x86-64 -mtune=generic"
+            export CXXFLAGS="-march=x86-64 -mtune=generic"
+            export LDFLAGS="-static-libgcc -static-libstdc++"
           fi
           make HOST=linux PLATFORM=${{ matrix.os-arch }} STATIC=1 -j$(nproc)
           chmod +x bin/cliraop-linux-${{ matrix.os-arch }}
           cp bin/cliraop-linux-${{ matrix.os-arch }} release/
+
+      - name: Verify binary
+        run: |
+          echo "Binary info:"
+          file bin/cliraop-linux-${{ matrix.os-arch }}
+          echo ""
+          echo "Dynamic dependencies:"
+          ldd bin/cliraop-linux-${{ matrix.os-arch }} || echo "Static binary (no dependencies)"
+          echo ""
+          echo "Size:"
+          ls -lh bin/cliraop-linux-${{ matrix.os-arch }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

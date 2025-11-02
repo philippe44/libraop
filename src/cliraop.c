@@ -148,7 +148,19 @@ static void close_platform()
 /*----------------------------------------------------------------------------*/
 static void *CmdPipeReaderThread(void *args)
 {
-	cmdPipeFd = open(cmdPipeName, O_RDONLY);
+	// Open with O_NONBLOCK to avoid blocking if no writer is present
+	cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
+	if (cmdPipeFd == -1)
+	{
+		LOG_ERROR("Failed to open command pipe: %s", cmdPipeName);
+		return NULL;
+	}
+
+	// Set back to blocking mode after opening
+	int file_flags = fcntl(cmdPipeFd, F_GETFL);
+	fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
+	LOG_INFO("Command pipe opened successfully");
+
 	struct
 	{
 		char *title;
@@ -164,7 +176,9 @@ static void *CmdPipeReaderThread(void *args)
 		if (!glMainRunning)
 			break;
 
-		if (read(cmdPipeFd, cmdPipeBuf, 512) > 0)
+		ssize_t bytes_read = read(cmdPipeFd, cmdPipeBuf, 512);
+
+		if (bytes_read > 0)
 		{
 			// read lines
 			char *save_ptr1, *save_ptr2;
@@ -296,8 +310,30 @@ static void *CmdPipeReaderThread(void *args)
 			// clear cmdPipeBuf
 			memset(cmdPipeBuf, 0, sizeof cmdPipeBuf);
 		}
+		else if (bytes_read == 0)
+		{
+			// EOF - writer closed the pipe, reopen to wait for next writer
+			LOG_DEBUG("Command pipe writer disconnected, waiting for reconnection...");
+			close(cmdPipeFd);
+
+			// Reopen with O_NONBLOCK to avoid blocking
+			cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
+			if (cmdPipeFd == -1)
+			{
+				LOG_ERROR("Failed to reopen command pipe: %s", cmdPipeName);
+				break;
+			}
+
+			// Set back to blocking mode for reads
+			int file_flags = fcntl(cmdPipeFd, F_GETFL);
+			fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
+
+			// Small delay before trying to read again
+			usleep(100 * 1000); // 100ms
+		}
 		else
 		{
+			// Error on read, sleep and retry
 			usleep(250 * 1000);
 		}
 	}
@@ -670,14 +706,12 @@ int main(int argc, char *argv[])
 
 	buf = malloc(DEFAULT_FRAMES_PER_CHUNK * 4);
 	uint32_t KeepAlive = 0;
+	bool got_eof = false;
 
 	// keep reading audio from stdin until exit/EOF
-	while (n || raopcl_is_playing(raopcl))
+	while (status != STOPPED && (!got_eof || raopcl_is_playing(raopcl)))
 	{
 		uint64_t playtime, now;
-
-		if (status == STOPPED)
-			break;
 
 		now = raopcl_get_ntp(NULL);
 
@@ -701,11 +735,30 @@ int main(int argc, char *argv[])
 		{
 			n = read(infile, buf, DEFAULT_FRAMES_PER_CHUNK * 4);
 
-			if (!n)
+			if (n < 0)
 			{
-				// EOF or no writer on FIFO yet - sleep to avoid busy-waiting
-				usleep(10000); // 10ms
-				continue;
+				// Error on read
+				LOG_ERROR("Error reading from audio source");
+				break;
+			}
+			else if (n == 0)
+			{
+				// EOF or no writer on FIFO yet
+				// Check if this is a regular file (true EOF) or FIFO (no writer yet)
+				struct stat st;
+				if (fstat(infile, &st) == 0 && S_ISFIFO(st.st_mode))
+				{
+					// It's a FIFO - no writer yet, keep waiting
+					usleep(10000); // 10ms
+					continue;
+				}
+				else
+				{
+					// Regular file EOF - mark as done and drain the buffer
+					LOG_INFO("End of audio file reached, draining buffer...");
+					got_eof = true;
+					continue;
+				}
 			}
 
 			raopcl_send_chunk(raopcl, buf, n / 4, &playtime);
