@@ -56,13 +56,20 @@ jobs:
       - name: Verify binary
         run: |
           echo "Binary info:"
-          file bin/cliraop-linux-${{ matrix.os-arch }}
+          file bin/cliraop-linux-${{ matrix.os-arch }} || true
           echo ""
-          echo "Dynamic dependencies:"
-          ldd bin/cliraop-linux-${{ matrix.os-arch }} || echo "Static binary (no dependencies)"
+          echo "Dynamic dependencies (x86_64 only):"
+          if [ "${{ matrix.os-arch }}" = "x86_64" ]; then
+            ldd bin/cliraop-linux-${{ matrix.os-arch }} 2>&1 || echo "Could not run ldd (static binary or not executable on this platform)"
+          else
+            echo "Skipping ldd for cross-compiled ${{ matrix.os-arch }} binary"
+          fi
           echo ""
-          echo "Size:"
+          echo "Binary size:"
           ls -lh bin/cliraop-linux-${{ matrix.os-arch }}
+          echo ""
+          echo "Checking for common dynamic libraries in binary:"
+          strings bin/cliraop-linux-${{ matrix.os-arch }} | grep -E '\.so\.' | head -20 || echo "No .so references found (likely fully static)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
