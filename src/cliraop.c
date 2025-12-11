@@ -148,17 +148,16 @@ static void close_platform()
 /*----------------------------------------------------------------------------*/
 static void *CmdPipeReaderThread(void *args)
 {
-	// Open with O_NONBLOCK to avoid blocking if no writer is present
-	cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
+	// Open with O_RDWR to prevent EOF when writer disconnects.
+	// This keeps a write reference open so read() blocks waiting for data
+	// instead of returning 0 (EOF) each time the Python writer closes.
+	cmdPipeFd = open(cmdPipeName, O_RDWR);
 	if (cmdPipeFd == -1)
 	{
 		LOG_ERROR("Failed to open command pipe: %s", cmdPipeName);
 		return NULL;
 	}
 
-	// Set back to blocking mode after opening
-	int file_flags = fcntl(cmdPipeFd, F_GETFL);
-	fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
 	LOG_INFO("Command pipe opened successfully");
 
 	struct
@@ -310,32 +309,12 @@ static void *CmdPipeReaderThread(void *args)
 			// clear cmdPipeBuf
 			memset(cmdPipeBuf, 0, sizeof cmdPipeBuf);
 		}
-		else if (bytes_read == 0)
-		{
-			// EOF - writer closed the pipe, reopen to wait for next writer
-			LOG_DEBUG("Command pipe writer disconnected, waiting for reconnection...");
-			close(cmdPipeFd);
-
-			// Reopen with O_NONBLOCK to avoid blocking
-			cmdPipeFd = open(cmdPipeName, O_RDONLY | O_NONBLOCK);
-			if (cmdPipeFd == -1)
-			{
-				LOG_ERROR("Failed to reopen command pipe: %s", cmdPipeName);
-				break;
-			}
-
-			// Set back to blocking mode for reads
-			int file_flags = fcntl(cmdPipeFd, F_GETFL);
-			fcntl(cmdPipeFd, F_SETFL, file_flags & ~O_NONBLOCK);
-
-			// Small delay before trying to read again
-			usleep(100 * 1000); // 100ms
-		}
-		else
+		else if (bytes_read < 0)
 		{
 			// Error on read, sleep and retry
 			usleep(250 * 1000);
 		}
+		// bytes_read == 0 won't happen with O_RDWR - read() blocks waiting for data
 	}
 
 	return NULL;
@@ -743,22 +722,13 @@ int main(int argc, char *argv[])
 			}
 			else if (n == 0)
 			{
-				// EOF or no writer on FIFO yet
-				// Check if this is a regular file (true EOF) or FIFO (no writer yet)
-				struct stat st;
-				if (fstat(infile, &st) == 0 && S_ISFIFO(st.st_mode))
+				// EOF - writer closed the pipe or end of file
+				if (!got_eof)
 				{
-					// It's a FIFO - no writer yet, keep waiting
-					usleep(10000); // 10ms
-					continue;
-				}
-				else
-				{
-					// Regular file EOF - mark as done and drain the buffer
-					LOG_INFO("End of audio file reached, draining buffer...");
+					LOG_INFO("End of audio stream reached, draining buffer...");
 					got_eof = true;
-					continue;
 				}
+				continue;
 			}
 
 			raopcl_send_chunk(raopcl, buf, n / 4, &playtime);
