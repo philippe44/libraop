@@ -55,7 +55,7 @@ bool startsWith(const char *pre, const char *str)
 // locals
 static bool glMainRunning = true;
 static pthread_t glCmdPipeReaderThread;
-char cmdPipeName[32];
+char cmdPipeName[256];
 int cmdPipeFd;
 char cmdPipeBuf[512];
 int latency = MS2TS(1000, 44100);
@@ -148,17 +148,14 @@ static void close_platform()
 /*----------------------------------------------------------------------------*/
 static void *CmdPipeReaderThread(void *args)
 {
-	// Open with O_RDWR to prevent EOF when writer disconnects.
-	// This keeps a write reference open so read() blocks waiting for data
-	// instead of returning 0 (EOF) each time the Python writer closes.
-	cmdPipeFd = open(cmdPipeName, O_RDWR);
+	// O_RDWR keeps the pipe open even when no writer is connected
+	cmdPipeFd = open(cmdPipeName, O_RDWR | O_NONBLOCK);
 	if (cmdPipeFd == -1)
 	{
-		LOG_ERROR("Failed to open command pipe: %s", cmdPipeName);
+		LOG_ERROR("Failed to open command pipe: %s (errno=%d)", cmdPipeName, errno);
 		return NULL;
 	}
-
-	LOG_INFO("Command pipe opened successfully");
+	LOG_INFO("Command pipe ready: %s", cmdPipeName);
 
 	struct
 	{
@@ -169,26 +166,19 @@ static void *CmdPipeReaderThread(void *args)
 		int progress;
 	} metadata = {"", "", "", 0, 0};
 
-	// Read and print line from named pipe
 	while (glMainRunning)
 	{
-		if (!glMainRunning)
-			break;
-
-		ssize_t bytes_read = read(cmdPipeFd, cmdPipeBuf, 512);
+		ssize_t bytes_read = read(cmdPipeFd, cmdPipeBuf, sizeof(cmdPipeBuf) - 1);
 
 		if (bytes_read > 0)
 		{
-			// read lines
+			cmdPipeBuf[bytes_read] = '\0';
 			char *save_ptr1, *save_ptr2;
 			char *line = strtok_r(cmdPipeBuf, "\n", &save_ptr1);
-			// loop through the string to extract all other tokens
 			while (line != NULL)
 			{
 				if (!glMainRunning)
 					break;
-
-				LOG_DEBUG("Received line on named pipe %s", line);
 				// extract key-value pair within line
 				char *key = strtok_r(line, "=", &save_ptr2);
 				if (strlen(key) == 0)
@@ -302,21 +292,27 @@ static void *CmdPipeReaderThread(void *args)
 									"astn", 'i', 1);
 				}
 
-				// read next line in cmdPipeBuf
-				line = strtok_r(NULL, "\n", &save_ptr1);
+					line = strtok_r(NULL, "\n", &save_ptr1);
 			}
-
-			// clear cmdPipeBuf
-			memset(cmdPipeBuf, 0, sizeof cmdPipeBuf);
+			memset(cmdPipeBuf, 0, sizeof(cmdPipeBuf));
 		}
 		else if (bytes_read < 0)
 		{
-			// Error on read, sleep and retry
-			usleep(250 * 1000);
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			{
+				usleep(50 * 1000);
+			}
+			else
+			{
+				LOG_ERROR("Error reading from command pipe: %s", strerror(errno));
+				usleep(250 * 1000);
+			}
 		}
-		// bytes_read == 0 won't happen with O_RDWR - read() blocks waiting for data
+		else
+		{
+			usleep(50 * 1000);
+		}
 	}
-
 	return NULL;
 }
 /*																		  */
@@ -582,28 +578,21 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	// setup named pipe for metadata/commands
+	// Setup command pipe and start reader thread before connecting
 	if (cmdpipe)
 	{
 		strncpy(cmdPipeName, cmdpipe, sizeof(cmdPipeName) - 1);
 		cmdPipeName[sizeof(cmdPipeName) - 1] = '\0';
-
-		// Create pipe only if it doesn't already exist (could be created by caller)
 		struct stat st;
 		if (stat(cmdPipeName, &st) != 0)
 		{
-			// Pipe doesn't exist, create it
 			if (mkfifo(cmdPipeName, 0666) != 0)
 			{
 				LOG_ERROR("Failed to create command pipe: %s", cmdPipeName);
 				exit(1);
 			}
-			LOG_INFO("Created command pipe: %s", cmdPipeName);
 		}
-		else
-		{
-			LOG_INFO("Using existing command pipe: %s", cmdPipeName);
-		}
+		pthread_create(&glCmdPipeReaderThread, NULL, CmdPipeReaderThread, NULL);
 	}
 
 	// init platform, initializes stdin
@@ -672,12 +661,6 @@ int main(int argc, char *argv[])
 				 (start_at + TS2NTP(latency, raopcl_sample_rate(raopcl)) > now) ? (uint32_t)NTP2MS(start_at - now + TS2NTP(latency, raopcl_sample_rate(raopcl))) : 0);
 
 		raopcl_start_at(raopcl, start_at);
-	}
-
-	// start the command/metadata reader thread if cmdpipe was specified
-	if (cmdpipe)
-	{
-		pthread_create(&glCmdPipeReaderThread, NULL, CmdPipeReaderThread, NULL);
 	}
 
 	start = raopcl_get_ntp(NULL);
