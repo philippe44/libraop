@@ -501,8 +501,8 @@ bool rtspcl_auth_setup(struct rtspcl_s *p) {
 	if (!p) return false;
 
 	uint8_t secret[SECRET_KEY_SIZE], * pub_key = malloc(PUBLIC_KEY_SIZE + 1);
-	uint8_t* rsp;
-	int rsp_len;
+	uint8_t* rsp = NULL;  // Initialize to NULL - may not be set if no response body
+	int rsp_len = 0;
 
 	// create a verification public key
 	RAND_bytes(secret, SECRET_KEY_SIZE);
