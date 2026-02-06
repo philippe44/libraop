@@ -130,7 +130,6 @@ typedef struct {
 typedef struct raopcl_s {
 	struct rtspcl_s *rtspcl;
 	raop_state_t state;
-	uint64_t last_keepalive;  // Track last keepalive time
 	char DACP_id[17], active_remote[11];
 	struct {
 		unsigned int ctrl, time;
@@ -677,7 +676,6 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	raopcld = malloc(sizeof(raopcl_data_t));
 	memset(raopcld, 0, sizeof(raopcl_data_t));
 
-	raopcld->last_keepalive = raopcl_get_ntp(NULL);  // Initialize last keepalive time
 	//  raopcld->sane is set to 0
 	raopcld->port_base = port_base;
 	raopcld->port_range = port_base ? port_range : 1;
@@ -1138,7 +1136,6 @@ bool _raopcl_disconnect(struct raopcl_s *p, bool force)
 
 	pthread_mutex_lock(&p->mutex);
 	p->state = RAOP_DOWN;
-	p->last_keepalive = raopcl_get_ntp(NULL);
 	pthread_mutex_unlock(&p->mutex);
 
 	_raopcl_terminate_rtp(p);
@@ -1362,14 +1359,6 @@ void *_rtp_control_thread(void *args)
 	while (raopcld->ctrl_running)	{
 		struct timeval timeout = { 1, 0 };
 		fd_set rfds;
-		uint64_t now = raopcl_get_ntp(NULL);
-
-		// Send keepalive packet every 25 seconds
-		if (now - raopcld->last_keepalive >= MS2NTP(25000)) {
-			LOG_INFO("[%p]: sending keepalive packet", raopcld);
-			raopcl_keepalive(raopcld);
-			raopcld->last_keepalive = now;
-		}
 
 		FD_ZERO(&rfds);
 		FD_SET(raopcld->rtp_ports.ctrl.fd, &rfds);

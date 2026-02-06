@@ -148,6 +148,9 @@ static void close_platform()
 /*----------------------------------------------------------------------------*/
 static void *CmdPipeReaderThread(void *args)
 {
+	uint64_t last_keepalive;  // Track last keepalive time
+
+	last_keepalive = raopcl_get_ntp(NULL);  // Initialize last keepalive time
 	// O_RDWR keeps the pipe open even when no writer is connected
 	cmdPipeFd = open(cmdPipeName, O_RDWR | O_NONBLOCK);
 	if (cmdPipeFd == -1)
@@ -168,8 +171,25 @@ static void *CmdPipeReaderThread(void *args)
 
 	while (glMainRunning)
 	{
-		ssize_t bytes_read = read(cmdPipeFd, cmdPipeBuf, sizeof(cmdPipeBuf) - 1);
+		struct pollfd pfds;
 
+		pfds.fd = cmdPipeFd;
+		pfds.events = POLLIN;
+
+		int n = poll(&pfds, 1, 1000);
+		if (!glMainRunning)
+			break;
+
+		uint64_t now = raopcl_get_ntp(NULL);
+		// Send keepalive packet every 20 seconds
+		if (now - last_keepalive >= MS2NTP(20000)) {
+			LOG_INFO("[%p]: sending keepalive packet", raopcl);
+			raopcl_keepalive(raopcl);
+			last_keepalive = now;
+		}
+		if (n <= 0 || !(pfds.revents & POLLIN)) continue;
+
+		ssize_t bytes_read = read(cmdPipeFd, cmdPipeBuf, sizeof(cmdPipeBuf) - 1);
 		if (bytes_read > 0)
 		{
 			cmdPipeBuf[bytes_read] = '\0';
@@ -298,19 +318,8 @@ static void *CmdPipeReaderThread(void *args)
 		}
 		else if (bytes_read < 0)
 		{
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-			{
-				usleep(50 * 1000);
-			}
-			else
-			{
-				LOG_ERROR("Error reading from command pipe: %s", strerror(errno));
-				usleep(250 * 1000);
-			}
-		}
-		else
-		{
-			usleep(50 * 1000);
+			LOG_ERROR("Error reading from command pipe: %s", strerror(errno));
+			usleep(250 * 1000);
 		}
 	}
 	return NULL;
@@ -667,7 +676,6 @@ int main(int argc, char *argv[])
 	status = PLAYING;
 
 	buf = malloc(DEFAULT_FRAMES_PER_CHUNK * 4);
-	uint32_t KeepAlive = 0;
 	bool got_eof = false;
 
 	// keep reading audio from stdin until exit/EOF
@@ -686,10 +694,6 @@ int main(int argc, char *argv[])
 			{
 				LOG_INFO("elapsed milliseconds: %" PRIu64, elapsed);
 			}
-
-			// send keepalive when needed (to prevent stop playback on homepods)
-			if (!(KeepAlive++ & 0x0f))
-				raopcl_keepalive(raopcl);
 		}
 
 		// send chunk if needed
