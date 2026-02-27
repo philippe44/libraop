@@ -59,7 +59,9 @@ OBJECTS += $(patsubst %.cpp,$(BUILDDIR)/%.o,$(filter %.cpp,$(SOURCES)))
 
 LIBRARY	= $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a $(MDNS)/$(HOST)/$(PLATFORM)/libmdns.a
 
-ifneq ($(STATIC),)
+ifeq ($(STATIC),)
+LDFLAGS += -lcrypto
+else
 LIBRARY	+= $(OPENSSL)/libopenssl.a
 DEFINES += -DSSL_STATIC_LIB
 endif
