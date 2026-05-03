@@ -266,7 +266,7 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 		ctx->http_listener = bind_socket(ctx->host, &resp.hport, SOCK_STREAM);
 	} while (ctx->http_listener < 0 && port.count < port_range);
 
-	int i = 128*1024;
+	int i = 256*1024;
 	setsockopt(ctx->http_listener, SOL_SOCKET, SO_SNDBUF, (void*) &i, sizeof(i));
 	rc &= ctx->http_listener > 0;
 	rc &= listen(ctx->http_listener, 1) == 0;
@@ -415,6 +415,11 @@ static void alac_decode(raopst_t *ctx, int16_t *dest, char *buf, int len, int *o
 
 /*---------------------------------------------------------------------------*/
 static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool first, char* data, int len) {
+	// decode ALAC outside mutex to reduce contention with HTTP thread
+	int16_t decoded_buf[ctx->frame_size * 2];
+	int decoded_len = 0;
+	alac_decode(ctx, decoded_buf, data, len, &decoded_len);
+
 	pthread_mutex_lock(&ctx->ab_mutex);
 
 	/* if we have received a RECORD with a seqno, then this is the first allowed rtp sequence number 
@@ -532,7 +537,8 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	}
 
 	if (abuf) {
-		alac_decode(ctx, abuf->data, data, len, &abuf->len);
+		memcpy(abuf->data, decoded_buf, decoded_len);
+		abuf->len = decoded_len;
 		abuf->ready = true;
 		abuf->missed = false;
 		// this is the local rtptime when this frame is expected to play
@@ -952,7 +958,9 @@ static void *http_thread_func(void *arg) {
 
 			if (sock != -1 && ctx->running) {
 				int on = 1;
+				int sndbuf = 256*1024;
 				setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
+				setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (void*) &sndbuf, sizeof(sndbuf));
 				LOG_INFO("[%p]: got HTTP connection %u", ctx, sock);
 			} else continue;
 		}
