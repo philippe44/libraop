@@ -1112,7 +1112,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 		NFREE(p);
 	}
 
-	kd_add(resp, "Server", "AirConnect");
+	kd_add(resp, "Server", "HairTunes");
 	kd_add(resp, "Content-Type", encoder_mimetype(ctx->encoder));
 	kd_add(resp, "TransferMode.dlna.org", "Streaming");
 
