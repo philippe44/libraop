@@ -902,7 +902,13 @@ static short *_buffer_get_frame(raopst_t *ctx, size_t *bytes) {
 
 	if (!curframe->ready) {
 		LOG_DEBUG("[%p]: created zero frame at %d (W:%hu R:%hu)", ctx, now - playtime, ctx->ab_write, ctx->ab_read);
-		memset(curframe->data, 0, ctx->frame_size * 4);
+		// inject faint noise (~2 LSB) instead of pure silence to prevent FLAC decoder stalls
+		int16_t *samples = curframe->data;
+		static uint32_t noise_seed = 79;
+		for (int i = 0; i < ctx->frame_size * 2; i++) {
+			noise_seed = noise_seed * 1103515245 + 12345;
+			samples[i] = (int16_t)((noise_seed >> 16) & 0x03) - 1;
+		}
 		*bytes = ctx->frame_size * 4;
 	} else {
 		*bytes = curframe->len;
@@ -1106,8 +1112,9 @@ static bool handle_http(raopst_t *ctx, int sock) {
 		NFREE(p);
 	}
 
-	kd_add(resp, "Server", "HairTunes");
+	kd_add(resp, "Server", "AirConnect");
 	kd_add(resp, "Content-Type", encoder_mimetype(ctx->encoder));
+	kd_add(resp, "TransferMode.dlna.org", "Streaming");
 
 	// is there a range request (chromecast non-compliance to HTTP !!!)
 	if (ctx->range && ((str = kd_lookup(headers, "Range")) != NULL)) {
