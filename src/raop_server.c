@@ -21,6 +21,9 @@
 #include "cross_net.h"
 #include "cross_log.h"
 
+#define REMOTE_CTRL_TIMEOUT_MS	2000
+#define RTSP_IDLE_TIMEOUT_MS	30000
+
 typedef struct raopsr_s {
 	struct mdns_service *svc;
 	struct mdnsd *svr;
@@ -127,7 +130,7 @@ struct raopsr_s *raopsr_create(struct in_addr host, struct mdnsd *svr, char *nam
 	} while (ctx->sock < 0 && port.count < port_range);
 
 	// then listen for RTSP incoming connections
-	if (ctx->sock < 0 || listen(ctx->sock, 1)) {
+	if (ctx->sock < 0 || listen(ctx->sock, 4)) {
 		LOG_ERROR("Cannot bind or listen RTSP listener: %s", strerror(errno));
 		closesocket(ctx->sock);
 		free(ctx);
@@ -251,37 +254,62 @@ void  raopsr_notify(struct raopsr_s *ctx, raopsr_event_t event, void *param) {
 
 	// no command to send to remote or no remote found yet
 	if (!command || !ctx->active_remote.port) {
-
 		NFREE(command);
-
 		return;
-
 	}
 
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+	if (sock < 0) {
+		LOG_ERROR("[%p]: cannot create remote control socket", ctx);
+		free(command);
+		return;
+	}
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
 	addr.sin_addr = ctx->active_remote.host;
 	addr.sin_port = htons(ctx->active_remote.port);
 
-	if (!connect(sock, (struct sockaddr*) &addr, sizeof(addr))) {
-		char *method, *buf, resp[512] = "";
-		int len;
-		key_data_t headers[4] = { {NULL, NULL} };
+	if (!connect(sock, (struct sockaddr*)&addr, sizeof(addr))) {
+		/* This is reached from callbacks that run with the owner's device mutex
+		   held. A blocking connect() to a controller that has gone to sleep,
+		   changed address or left the network does not fail fast - it stalls for
+		   the kernel's SYN-retry budget (over two minutes on Linux) while holding
+		   that mutex, which blocks every other event for the device, including the
+		   one that starts playback. Bound the connect, and the exchange after it. */
+		set_nonblock(sock);
+		
+		if (!tcp_connect_timeout(sock, addr, REMOTE_CTRL_TIMEOUT_MS)) {
+			char* method, * buf, resp[512] = "";
+			int len;
+			key_data_t headers[4] = { {NULL, NULL} };
+#if WIN
+			DWORD tv = REMOTE_CTRL_TIMEOUT_MS;
+#else
+			struct timeval tv = { REMOTE_CTRL_TIMEOUT_MS / 1000, (REMOTE_CTRL_TIMEOUT_MS % 1000) * 1000 };
+#endif
+			
+			set_block(sock);
+			setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (void*)&tv, sizeof(tv));
+			setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (void*)&tv, sizeof(tv));
 
-		(void)!asprintf(&method, "GET /ctrl-int/1/%s HTTP/1.0", command);
-		kd_add(headers, "Active-Remote", ctx->active_remote.id);
-		kd_add(headers, "Connection", "close");
+			(void)!asprintf(&method, "GET /ctrl-int/1/%s HTTP/1.0", command);
+			kd_add(headers, "Active-Remote", ctx->active_remote.id);
+			kd_add(headers, "Connection", "close");
 
-		buf = http_send(sock, method, headers);
-		len = recv(sock, resp, 512, 0);
-		if (len > 0) resp[len-1] = '\0';
-		LOG_INFO("[%p]: sending airplay remote\n%s<== received ==>\n%s", ctx, buf, resp);
+			buf = http_send(sock, method, headers);
+			len = recv(sock, resp, sizeof(resp), 0);
+			if (len > 0) resp[len-1] = '\0';
+			LOG_INFO("[%p]: sending airplay remote\n%s<== received ==>\n%s", ctx, buf, resp);
 
-		NFREE(method);
-		NFREE(buf);
-		kd_free(headers);
+			NFREE(method);
+			NFREE(buf);
+			kd_free(headers);
+		} else {
+			LOG_WARN("[%p]: remote control %s:%hu unreachable, dropping '%s'", ctx,
+				inet_ntoa(ctx->active_remote.host), ctx->active_remote.port, command);
+		}
 	}
 
 	free(command);
@@ -309,11 +337,12 @@ void raopsr_metadata_copy(raopsr_metadata_t* dst, raopsr_metadata_t* src) {
 static void *rtsp_thread(void *arg) {
 	raopsr_t *ctx = (raopsr_t*) arg;
 	int  sock = -1;
+	uint32_t last_rx;
 
 	while (ctx->running) {
 		fd_set rfds;
 		struct timeval timeout = {0, 100*1000};
-		int n;
+		int n, nfds;
 		bool res = false;
 
 		if (sock == -1) {
@@ -326,10 +355,11 @@ static void *rtsp_thread(void *arg) {
 
 			if (select(ctx->sock + 1, &rfds, NULL, NULL, &timeout) > 0) {
 				sock = accept(ctx->sock, (struct sockaddr*)&peer, &addrlen);
-				ctx->peer.s_addr = peer.sin_addr.s_addr;
+				if (sock != -1) ctx->peer.s_addr = peer.sin_addr.s_addr;
 			}
 
 			if (sock != -1 && ctx->running) {
+				last_rx = gettime_ms();
 				LOG_INFO("got RTSP connection %u", sock);
 			} else continue;
 		}
@@ -337,13 +367,33 @@ static void *rtsp_thread(void *arg) {
 		FD_ZERO(&rfds);
 		FD_SET(sock, &rfds);
 
-		n = select(sock + 1, &rfds, NULL, NULL, &timeout);
+		// listening socket might disapear w/o TEARDOWN sent
+		FD_SET(ctx->sock, &rfds);
+		nfds = (sock > ctx->sock ? sock : ctx->sock) + 1;
+		n = select(nfds, &rfds, NULL, NULL, &timeout);
+		
+		if (n < 0) {
+			closesocket(sock);
+			LOG_INFO("RTSP close %u", sock);
+			sock = -1;
+			continue;
+		}
 
 		if (!n) continue;
 
-		if (n > 0) res = handle_rtsp(ctx, sock);
+		if (FD_ISSET(ctx->sock, &rfds) && gettime_ms() - last_rx > RTSP_IDLE_TIMEOUT_MS) {
+			LOG_WARN("RTSP %u idle for %us with a connection pending, displacing it", sock, (unsigned)((gettime_ms() - last_rx) / 1000));
+			closesocket(sock);
+			sock = -1;
+			continue;
+		}
 
-		if (n < 0 || !res) {
+		if (!FD_ISSET(sock, &rfds)) continue;
+		
+		last_rx = gettime_ms();
+		res = handle_rtsp(ctx, sock);
+
+		if (!res) {
 			closesocket(sock);
 			LOG_INFO("RTSP close %u", sock);
 			sock = -1;
