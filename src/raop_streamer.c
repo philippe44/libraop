@@ -293,6 +293,8 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 
 /*---------------------------------------------------------------------------*/
 void raopst_metadata(struct raopst_s *ctx, raopsr_metadata_t *metadata) {
+	// ctx is NULL when no streamer is active (after TEARDOWN, or SETUP failed)
+	if (!ctx) return;
 	pthread_mutex_lock(&ctx->ab_mutex);
 	// free previous metadata if we have not been able to send them yet
 	raopsr_metadata_free(&ctx->metadata);
