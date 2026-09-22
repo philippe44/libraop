@@ -410,7 +410,7 @@ static void *rtsp_thread(void *arg) {
 static bool handle_rtsp(raopsr_t* ctx, int sock)
 {
 	char* buf = NULL, * body = NULL, method[16] = "";
-	key_data_list_t hdr = { 64, (key_data_t[64]) { { 0 } } };
+	key_data_list_t hdr = { 63, (key_data_t[64]) { { 0 } } };
 	key_data_t resp[16] = { 0 }, *headers = hdr.kd;
 	int len;
 	char *response = NULL;

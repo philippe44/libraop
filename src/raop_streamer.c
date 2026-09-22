@@ -1087,7 +1087,7 @@ static void *http_thread_func(void *arg) {
 /*----------------------------------------------------------------------------*/
 static bool handle_http(raopst_t *ctx, int sock) {
 	char *body = NULL, method[16] = "", proto[16] = "", *str, *head = NULL;
-	key_data_list_t hdr = { 64, (key_data_t[64]) { { 0 } } }; 
+	key_data_list_t hdr = { 63, (key_data_t[64]) { { 0 } } }; 
 	key_data_t *headers = hdr.kd, resp[16] = { { NULL, NULL } };
 	size_t offset = 0;
 	int len;

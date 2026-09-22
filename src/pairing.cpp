@@ -201,7 +201,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 	struct sockaddr_in peer = { };
 	std::string udn;
 	key_data_t headers[64] = { { 0 } };
-	key_data_list_t hdr = { 16, headers };
+	key_data_list_t hdr = { 63, headers };
 
 	//key_data_t *headers = hdr.kd;
 	int sock = -1;
