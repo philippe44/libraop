@@ -1087,11 +1087,12 @@ static void *http_thread_func(void *arg) {
 /*----------------------------------------------------------------------------*/
 static bool handle_http(raopst_t *ctx, int sock) {
 	char *body = NULL, method[16] = "", proto[16] = "", *str, *head = NULL;
-	key_data_t headers[64], resp[16] = { { NULL, NULL } };
+	key_data_list_t hdr = { 64, (key_data_t[64]) { { 0 } } }; 
+	key_data_t *headers = hdr.kd, resp[16] = { { NULL, NULL } };
 	size_t offset = 0;
 	int len;
 
-	if (!http_parse(sock, method, NULL, proto, headers, &body, &len)) return false;
+	if (!http_parse(sock, method, NULL, proto, &hdr, &body, &len)) return false;
 	bool HTTP_11 = strstr(proto, "HTTP/1.1") != NULL;
 
 	if (*loglevel >= lINFO) {

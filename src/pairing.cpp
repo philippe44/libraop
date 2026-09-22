@@ -200,7 +200,10 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 
 	struct sockaddr_in peer = { };
 	std::string udn;
-	key_data_t headers[16] = { };
+	key_data_t headers[64] = { { 0 } };
+	key_data_list_t hdr = { 16, headers };
+
+	//key_data_t *headers = hdr.kd;
 	int sock = -1;
 
 	peer.sin_family = AF_INET;
@@ -240,7 +243,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 
 	// request a PIN code to be displayed on ATV
 #ifndef TEST_VECTOR
-	if (http_parse(sock, method, resource, NULL, headers, NULL, &len) && strcasestr(resource, "200")) {
+	if (http_parse(sock, method, resource, NULL, &hdr, NULL, &len) && strcasestr(resource, "200")) {
 		kd_free(headers);
 #else
 	if (1) {
@@ -276,7 +279,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 		// send the PIN code and receive a salt and public key (B)
 		char* body = NULL;
 #ifndef TEST_VECTOR
-		if (http_parse(sock, method, resource, NULL, headers, &body, &len) && strcasestr(resource, "200")) {
+		if (http_parse(sock, method, resource, NULL, &hdr, &body, &len) && strcasestr(resource, "200")) {
 			kd_free(headers);
 #else
 		if (1) {
@@ -313,7 +316,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 
 			// get the M2 proof (don't verify it) and sign K and a public key
 #ifndef TEST_VECTOR
-			if (http_parse(sock, method, resource, NULL, headers, &body, &len) && strcasestr(resource, "200")) {
+			if (http_parse(sock, method, resource, NULL, &hdr, &body, &len) && strcasestr(resource, "200")) {
 				kd_free(headers);
 #else
 			if (1) {
@@ -382,7 +385,7 @@ bool AppleTVpairing(struct mdnssd_handle_s* mDNShandle, char **pUDN, char **pSec
 				kd_free(headers);
 
 #ifndef TEST_VECTOR
-				if (http_parse(sock, method, resource, NULL, headers, &body, &len) && strcasestr(resource, "200")) {
+				if (http_parse(sock, method, resource, NULL, &hdr, &body, &len) && strcasestr(resource, "200")) {
 					kd_free(headers);
 					auto a_hex = BN_bn2hex(a);
 					*pSecret = strdup(a_hex);
