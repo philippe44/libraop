@@ -125,7 +125,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 							   char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int frame_len, int latency_frames,
 							   raop_crypto_t crypto, bool auth, char *secret, char *passwd,
-							   char *et, char *md,
+							   char *et, char *md, char const* am,
 							   int sample_rate, int sample_size, int channels, float volume);
 
 bool	raopcl_destroy(struct raopcl_s *p);

@@ -64,7 +64,7 @@ int rtspcl_get_serv_sock(struct rtspcl_s *p) {
 }
 
 /*----------------------------------------------------------------------------*/
-struct rtspcl_s *rtspcl_create(char *useragent) {
+struct rtspcl_s *rtspcl_create(char const *useragent) {
 	rtspcl_t* rtspcld = malloc(sizeof(rtspcl_t));
 	memset(rtspcld, 0, sizeof(rtspcl_t));
 	rtspcld->useragent = useragent;

@@ -175,7 +175,7 @@ int main(int argc, char *argv[]) {
 	raop_crypto_t crypto = RAOP_CLEAR;
 	uint64_t start = 0, start_at = 0, last = 0, frames = 0;
 	bool interactive = false, alac = false, pairing = false;
-	char *secret = NULL, *md = NULL, *et = NULL;
+	char *secret = NULL, *md = NULL, *et = NULL, *am = NULL;
 	bool auth = false;
 	struct in_addr host = { INADDR_ANY };
 
@@ -203,8 +203,10 @@ int main(int argc, char *argv[]) {
 			secret = argv[++i];
 		} else if (!strcmp(argv[i],"-m")) {
 			md = argv[++i];
+		} else if (!strcmp(argv[i], "-o")) {
+			md = argv[++i];
 		} else if(!strcmp(argv[i],"-t")) {
-			et = argv[++i];
+			am = argv[++i];
 		} else if (!strcmp(argv[i], "-u")) {
 			auth = true;
 		} else if (!strcmp(argv[i],"-a")) {
@@ -269,7 +271,7 @@ int main(int argc, char *argv[]) {
 	
 	// create the raop context
 	if ((raopcl = raopcl_create(host, 0, 0, NULL, NULL, alac ? RAOP_ALAC : RAOP_PCM, DEFAULT_FRAMES_PER_CHUNK,
-								latency, crypto, auth, secret, passwd, et, md,
+								latency, crypto, auth, secret, passwd, et, md, am,
 								44100, 16, 2,
 								raopcl_float_volume(volume))) == NULL) {
 		LOG_ERROR("Cannot init RAOP %p", raopcl);

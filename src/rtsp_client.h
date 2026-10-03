@@ -23,7 +23,7 @@ typedef struct rtp_port_s {
 	sock_info_t audio;
 } rtp_port_t;
 
-struct rtspcl_s *rtspcl_create(char* user_name);
+struct rtspcl_s *rtspcl_create(char const *user_name);
 bool   			rtspcl_destroy(struct rtspcl_s *p);
 
 bool rtspcl_connect(struct rtspcl_s *p, struct in_addr local, struct in_addr host, unsigned short destport, char *sid);

@@ -663,7 +663,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 							   char *DACP_id, char *active_remote,
 							   raop_codec_t codec, int chunk_len, int latency_frames,
 							   raop_crypto_t crypto, bool auth, char *secret, char* passwd,
-							   char *et, char *md,
+							   char *et, char *md, char const *am, 
 							   int sample_rate, int sample_size, int channels, float volume)
 {
 	raopcl_data_t *raopcld;
@@ -702,8 +702,12 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	if (md && strchr(md, '1')) raopcld->md_caps |= MD_ARTWORK;
 	if (md && strchr(md, '2')) raopcld->md_caps |= MD_PROGRESS;
 
+	// starting with OS27, Apple checks ua (sigh...)
+	char const *ua = "iTunes/7.6.2 (Windows; N;)";
+	if (am && (strcasestr(am, "AudioAccessory") || strcasestr(am, "AppleTV"))) ua = "AirPlay/999.0.0";
+
 	// init RTSP if needed
-	if (((raopcld->rtspcl = rtspcl_create("iTunes/7.6.2 (Windows; N;)")) == NULL)) {
+	if (((raopcld->rtspcl = rtspcl_create(ua)) == NULL)) {
 		LOG_ERROR("[%p]: Cannot create RTSP context", raopcld);
 		free(raopcld);
 		return NULL;
