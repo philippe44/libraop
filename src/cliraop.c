@@ -84,6 +84,7 @@ static int print_usage(char *argv[])
 			   "\t[-r] do AppleTV pairing\n"
 			   "\t[-t <et>] (et field in mDNS - 4 for airport-express and used to detect MFi)\n"
 			   "\t[-m <[0][,1][,2]>] (md in mDNS: metadata capabilties 0=text, 1=artwork, 2=progress)\n"
+			   "\t[-o <model>] (am in mDNS: model HomePods, AppleTV...\n" 
 			   "\t[-d <debug level>] (0 = silent)\n"
 			   "\t[-i] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n",
 			   name);
