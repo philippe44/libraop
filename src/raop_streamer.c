@@ -102,6 +102,8 @@ typedef struct raopst_s {
 	int skip;				// number of frames to skip to keep sync alignement
 	abuf_t audio_buffer[BUFFER_FRAMES];
 	int http_listener;
+	int http_socket;
+	pthread_mutex_t http_mutex;
 	seq_t ab_read, ab_write;
 	pthread_mutex_t ab_mutex;
 	pthread_t http_thread, rtp_thread;
@@ -200,6 +202,8 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 	ctx->rtp_host.sin_family = AF_INET;
 	ctx->rtp_host.sin_addr.s_addr = INADDR_ANY;
 	pthread_mutex_init(&ctx->ab_mutex, 0);
+	pthread_mutex_init(&ctx->http_mutex, 0);
+	ctx->http_socket = -1;
 	ctx->first_seqno = -1;
 
 	// create the encoder
@@ -270,6 +274,8 @@ raopst_resp_t raopst_init(struct in_addr host, struct in_addr peer, char *codec,
 	setsockopt(ctx->http_listener, SOL_SOCKET, SO_SNDBUF, (void*) &i, sizeof(i));
 	rc &= ctx->http_listener > 0;
 	rc &= listen(ctx->http_listener, 1) == 0;
+	// Readiness can disappear before accept (e.g. a reset queued connection).
+	if (rc) set_nonblock(ctx->http_listener);
 
 	resp.cport = ctx->rtp_sockets[CONTROL].lport;
 	resp.tport = ctx->rtp_sockets[TIMING].lport;
@@ -308,7 +314,18 @@ void raopst_end(raopst_t *ctx) {
 	if (!ctx) return;
 
 	if (ctx->running) {
+		// The HTTP worker owns close(); shutdown wakes blocked reads and writes.
+		// Use a separate mutex as handle_http can block while holding ab_mutex.
+		pthread_mutex_lock(&ctx->http_mutex);
 		ctx->running = false;
+		if (ctx->http_socket != -1) {
+#if WIN
+			shutdown(ctx->http_socket, SD_BOTH);
+#else
+			shutdown(ctx->http_socket, SHUT_RDWR);
+#endif
+		}
+		pthread_mutex_unlock(&ctx->http_mutex);
 		pthread_join(ctx->rtp_thread, NULL);
 		pthread_join(ctx->http_thread, NULL);
 	}
@@ -320,6 +337,7 @@ void raopst_end(raopst_t *ctx) {
 	encoder_delete(ctx->encoder);
 
 	pthread_mutex_destroy(&ctx->ab_mutex);
+	pthread_mutex_destroy(&ctx->http_mutex);
 	buffer_release(ctx->audio_buffer);
 	free(ctx->silence_frame);
 	free(ctx->http_cache);
@@ -933,6 +951,15 @@ int send_data(bool chunked, int sock, const void *data, int size, int flags) {
 }
 
 /*---------------------------------------------------------------------------*/
+static void http_close(raopst_t *ctx, int sock) {
+	// Retire the descriptor under the same lock used by teardown, avoiding reuse.
+	pthread_mutex_lock(&ctx->http_mutex);
+	ctx->http_socket = -1;
+	closesocket(sock);
+	pthread_mutex_unlock(&ctx->http_mutex);
+}
+
+/*---------------------------------------------------------------------------*/
 static void *http_thread_func(void *arg) {
 	int frame_count = 0;
 	raopst_t *ctx = (raopst_t*) arg;
@@ -950,10 +977,19 @@ static void *http_thread_func(void *arg) {
 
 			if (select(ctx->http_listener + 1, &rfds, NULL, NULL, &timeout) > 0) {
 				sock = accept(ctx->http_listener, NULL, NULL);
+				pthread_mutex_lock(&ctx->http_mutex);
+				if (sock != -1 && ctx->running) ctx->http_socket = sock;
+				else if (sock != -1) {
+					closesocket(sock);
+					sock = -1;
+				}
+				pthread_mutex_unlock(&ctx->http_mutex);
 			}
 
 			if (sock != -1 && ctx->running) {
 				int on = 1;
+				// Some platforms inherit the listener's nonblocking mode.
+				set_block(sock);
 				setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
 				LOG_INFO("[%p]: got HTTP connection %u", ctx, sock);
 			} else continue;
@@ -985,7 +1021,7 @@ static void *http_thread_func(void *arg) {
 		// terminate connection if required by HTTP peer
 		if (n < 0 || !res || ctx->close_socket) {
 			LOG_INFO("HTTP close %u", sock);
-			closesocket(sock);
+			http_close(ctx, sock);
 			sock = -1;
 			ctx->close_socket = ctx->http_ready = false;
 		}
@@ -1078,7 +1114,7 @@ static void *http_thread_func(void *arg) {
 		}
 	}
 
-	if (sock != -1) shutdown_socket(sock);
+	if (sock != -1) http_close(ctx, sock);
 
 	LOG_INFO("[%p]: terminating", ctx);
 	return NULL;
