@@ -951,11 +951,11 @@ int send_data(bool chunked, int sock, const void *data, int size, int flags) {
 }
 
 /*---------------------------------------------------------------------------*/
-static void http_close(raopst_t *ctx, int sock) {
+static void http_close(raopst_t *ctx) {
 	// Retire the descriptor under the same lock used by teardown, avoiding reuse.
 	pthread_mutex_lock(&ctx->http_mutex);
+	if (ctx->http_socket != -1) closesocket(ctx->http_socket);
 	ctx->http_socket = -1;
-	closesocket(sock);
 	pthread_mutex_unlock(&ctx->http_mutex);
 }
 
@@ -963,48 +963,42 @@ static void http_close(raopst_t *ctx, int sock) {
 static void *http_thread_func(void *arg) {
 	int frame_count = 0;
 	raopst_t *ctx = (raopst_t*) arg;
-	int sock = -1;
 	struct timeval timeout = { 0, 0 };
 
 	while (ctx->running) {
 		fd_set rfds;
 
-		if (sock == -1) {
+		if (ctx->http_socket == -1) {
 			struct timeval timeout = {0, 50*1000};
 
 			FD_ZERO(&rfds);
 			FD_SET(ctx->http_listener, &rfds);
 
 			if (select(ctx->http_listener + 1, &rfds, NULL, NULL, &timeout) > 0) {
-				sock = accept(ctx->http_listener, NULL, NULL);
 				pthread_mutex_lock(&ctx->http_mutex);
-				if (sock != -1 && ctx->running) ctx->http_socket = sock;
-				else if (sock != -1) {
-					closesocket(sock);
-					sock = -1;
-				}
+				if (ctx->running) ctx->http_socket = accept(ctx->http_listener, NULL, NULL);
 				pthread_mutex_unlock(&ctx->http_mutex);
 			}
 
-			if (sock != -1 && ctx->running) {
+			if (ctx->http_socket != -1 && ctx->running) {
 				int on = 1;
 				// Some platforms inherit the listener's nonblocking mode.
-				set_block(sock);
-				setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
-				LOG_INFO("[%p]: got HTTP connection %u", ctx, sock);
+				set_block(ctx->http_socket);
+				setsockopt(ctx->http_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
+				LOG_INFO("[%p]: got HTTP connection %u", ctx, ctx->http_socket);
 			} else continue;
 		}
 
 		FD_ZERO(&rfds);
-		FD_SET(sock, &rfds);
+		FD_SET(ctx->http_socket, &rfds);
 
-		int n = select(sock + 1, &rfds, NULL, NULL, &timeout);
+		int n = select(ctx->http_socket + 1, &rfds, NULL, NULL, &timeout);
 		bool res = true;
 
 		pthread_mutex_lock(&ctx->ab_mutex);
 
 		if (n > 0) {
-			res = handle_http(ctx, sock);
+			res = handle_http(ctx, ctx->http_socket);
 			ctx->http_ready = res;
 
 			// only send silence when it's the first GET (or after a flush)
@@ -1020,9 +1014,8 @@ static void *http_thread_func(void *arg) {
 
 		// terminate connection if required by HTTP peer
 		if (n < 0 || !res || ctx->close_socket) {
-			LOG_INFO("HTTP close %u", sock);
-			http_close(ctx, sock);
-			sock = -1;
+			LOG_INFO("HTTP close %u", ctx->http_socket);
+			http_close(ctx);
 			ctx->close_socket = ctx->http_ready = false;
 		}
 
@@ -1075,11 +1068,11 @@ static void *http_thread_func(void *arg) {
 
 					// send remaining data first
 					offset = ctx->icy.remain;
-					if (offset) send_data(ctx->http_length == -3, sock, data, offset, 0);
+					if (offset) send_data(ctx->http_length == -3, ctx->http_socket, data, offset, 0);
 					bytes -= offset;
 
 					// then send icy data
-					send_data(ctx->http_length == -3, sock, buffer, len_16 * 16 + 1, 0);
+					send_data(ctx->http_length == -3, ctx->http_socket, buffer, len_16 * 16 + 1, 0);
 					ctx->icy.remain = ctx->icy.interval;
 
 					LOG_SDEBUG("[%p]: ICY checked %u", ctx, ctx->icy.remain);
@@ -1089,7 +1082,7 @@ static void *http_thread_func(void *arg) {
 				}
 
 				LOG_SDEBUG("[%p]: HTTP sent frame count:%u bytes:%u (W:%hu R:%hu)", ctx, frame_count++, bytes + offset, ctx->ab_write, ctx->ab_read);
-				ssize_t sent = send_data(ctx->http_length == -3, sock, data + offset , bytes, 0);
+				ssize_t sent = send_data(ctx->http_length == -3, ctx->http_socket, data + offset , bytes, 0);
 
 				// update remaining count with desired length
 				if (ctx->icy.active) ctx->icy.remain -= bytes;
@@ -1114,7 +1107,7 @@ static void *http_thread_func(void *arg) {
 		}
 	}
 
-	if (sock != -1) http_close(ctx, sock);
+	http_close(ctx);
 
 	LOG_INFO("[%p]: terminating", ctx);
 	return NULL;
