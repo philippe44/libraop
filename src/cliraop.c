@@ -86,7 +86,8 @@ static int print_usage(char *argv[])
 			   "\t[-m <[0][,1][,2]>] (md in mDNS: metadata capabilties 0=text, 1=artwork, 2=progress)\n"
 			   "\t[-o <model>] (am in mDNS: model HomePods, AppleTV...\n" 
 			   "\t[-d <debug level>] (0 = silent)\n"
-			   "\t[-i] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n",
+			   "\t[-i] (interactive commands: 'p'=pause, 'r'=(re)start, 's'=stop, 'q'=exit, ' '=block)\n"
+			   "\t[-R] ('r' does a full RTSP re-handshake (raopcl_repair) before restart)\n",
 			   name);
 	return -1;
 }
@@ -175,7 +176,7 @@ int main(int argc, char *argv[]) {
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	uint64_t start = 0, start_at = 0, last = 0, frames = 0;
-	bool interactive = false, alac = false, pairing = false;
+	bool interactive = false, alac = false, pairing = false, repair_resume = false;
 	char *secret = NULL, *md = NULL, *et = NULL, *am = NULL;
 	bool auth = false;
 	struct in_addr host = { INADDR_ANY };
@@ -200,6 +201,8 @@ int main(int argc, char *argv[]) {
 			latency=atoi(argv[++i]);
 		} else if (!strcmp(argv[i],"-i")) {
 			interactive = true;
+		} else if (!strcmp(argv[i],"-R")) {
+			repair_resume = true;
 		} else if(!strcmp(argv[i],"-s")) {
 			secret = argv[++i];
 		} else if (!strcmp(argv[i],"-m")) {
@@ -361,6 +364,9 @@ int main(int argc, char *argv[]) {
 			case 'r': {
 				uint64_t now = raopcl_get_ntp(NULL);
 				uint64_t start_at = now + MS2NTP(200) - TS2NTP(latency, raopcl_sample_rate(raopcl));
+
+				// resume with a full RTSP re-handshake instead of the bare start_at
+				if (repair_resume) raopcl_repair(raopcl, true);
 
 				status = PLAYING;
 				raopcl_start_at(raopcl, start_at);
