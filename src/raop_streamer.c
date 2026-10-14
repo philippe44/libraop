@@ -982,7 +982,7 @@ static void *http_thread_func(void *arg) {
 
 			if (ctx->http_socket != -1 && ctx->running) {
 				int on = 1;
-				// Some platforms inherit the listener's nonblocking mode.
+				// Some platforms do no inherit listener's attributes
 				set_block(ctx->http_socket);
 				setsockopt(ctx->http_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
 				LOG_INFO("[%p]: got HTTP connection %u", ctx, ctx->http_socket);
