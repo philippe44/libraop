@@ -541,6 +541,7 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 			break;
 		}
 		default:
+			pthread_mutex_unlock(&p->mutex);
 			LOG_ERROR("[%p]: don't know what we're doing here", p);
 			return false;
 	}

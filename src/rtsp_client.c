@@ -248,8 +248,9 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd) 
 	if (!hds[0].data) return false;
 	hds[1].key = NULL;
 
-	if (!exec_request(p, "SETUP", NULL, NULL, 0, 1, hds, rkd, NULL, NULL, NULL)) return false;
+	bool res = exec_request(p, "SETUP", NULL, NULL, 0, 1, hds, rkd, NULL, NULL, NULL);
 	free(hds[0].data);
+	if (!res) return false;
 
 	if ((temp = kd_lookup(rkd, "Session")) != NULL) {
 		p->session = strdup(strtrim(temp));
