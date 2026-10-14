@@ -1,3 +1,49 @@
+2026-10-14
+ - fix teardown hanging when an HTTP receiver stops reading
+ - release client mutex on unsupported codec errors
+ - fix Transport header leak when RTSP SETUP fails
+
+2026-10-03
+ - add am (device model) parameter to raopcl_create and use AirPlay user-agent for Apple TV and HomePods
+
+2026-09-26
+ - update crosstools and codec dependencies and fix builds
+
+2026-09-22
+ - use explicit header limits for HTTP/RTSP and Apple TV pairing parsing
+
+2026-09-16
+ - fix crash on metadata or artwork received with no active streamer
+
+2026-08-27
+ - add LICENSE.txt
+
+2026-08-04
+ - allow pending RTSP connections to replace a connection idle for more than 30 seconds
+ - add send/receive timeouts for remote control requests
+ - update libcodecs
+
+2026-08-01
+ - link libcrypto when not using static OpenSSL
+
+2026-07-30
+ - update codecs (FLAC)
+
+2026-05-07
+ - update libcodecs and macOS builds
+
+2026-05-03
+ - fix authentication setup crash when the response body is empty
+
+2025-12-17
+ - fix crash on malformed RTSP responses
+
+2025-09-10
+ - send keep-alive
+
+2023-12
+-- raop_streamer: no content-length on chunked-encoding, even on range request
+
 2025-09-10
  - send keep-alive
 
