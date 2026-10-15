@@ -1180,10 +1180,14 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 		RAND_bytes(p->shk, sizeof(p->shk));
 		VALGRIND_MAKE_MEM_DEFINED(p->shk, sizeof(p->shk));
 
+		// the device checks our timing port before it answers: no answer means it cannot reach it
 		if (!rtspcl_ap2_setup_stream(p->rtspcl, p->rtp_ports.ctrl.lport, p->shk, sizeof(p->shk), seed.sid,
 									 p->codec != RAOP_PCM, p->sample_rate, p->chunk_len,
 									 RAOP_LATENCY_MIN, max(88200, raopcl_latency(p)),
-									 &p->rtp_ports.audio.rport, &p->rtp_ports.ctrl.rport)) goto erexit;
+									 &p->rtp_ports.audio.rport, &p->rtp_ports.ctrl.rport)) {
+			LOG_ERROR("[%p]: stream SETUP failed, check that the device can reach our UDP port %hu (firewall, Docker bridge)", p, p->rtp_ports.time.lport);
+			goto erexit;
+		}
 	} else {
 		// RTSP pairing verify for AppleTV
 		if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
