@@ -738,11 +738,15 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 static void _raopcl_terminate_rtp(struct raopcl_s *p)
 {
 	// Terminate RTP threads and close sockets
-	p->ctrl_running = false;
-	pthread_join(p->ctrl_thread, NULL);
+	if (p->ctrl_running) {
+		p->ctrl_running = false;
+		pthread_join(p->ctrl_thread, NULL);
+	}
 
-	p->time_running = false;
-	pthread_join(p->time_thread, NULL);
+	if (p->time_running) {
+		p->time_running = false;
+		pthread_join(p->time_thread, NULL);
+	}
 
 	if (p->rtp_ports.ctrl.fd != -1) closesocket(p->rtp_ports.ctrl.fd);
 	if (p->rtp_ports.time.fd != -1) closesocket(p->rtp_ports.time.fd);

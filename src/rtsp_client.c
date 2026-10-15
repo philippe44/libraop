@@ -254,13 +254,10 @@ bool rtspcl_setup(struct rtspcl_s *p, struct rtp_port_s *port, key_data_t *rkd) 
 	if ((temp = kd_lookup(rkd, "Session")) != NULL) {
 		p->session = strdup(strtrim(temp));
 		LOG_DEBUG("[%p]: <------ : session:%s", p, p->session);
-		return true;
+	} else {
+		LOG_WARN("[%p]: no Session header in SETUP response (continuing without)", p);
 	}
-	else {
-		kd_free(rkd);
-		LOG_ERROR("[%p]: no session in response", p);
-		return false;
-	}
+	return true;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -268,8 +265,7 @@ bool rtspcl_record(struct rtspcl_s *p, uint16_t start_seq, uint32_t start_ts, ke
 	if (!p) return false;
 
 	if (!p->session){
-		LOG_ERROR("[%p]: no session in progress", p);
-		return false;
+		LOG_WARN("[%p]: no session in progress (continuing)", p);
 	}
 
 	key_data_t hds[3];
@@ -664,6 +660,29 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 	if (token == NULL || strcmp(token, "200")) {
 		if (token == NULL || strcmp(token, "501") || strcmp(cmd, "OPTIONS")) {
 			LOG_ERROR("[%p]: <------ : request failed, error %s %s", rtspcld, line, (token ? token : ""));
+		}
+		// drain response to prevent desync: read headers until blank line, then body if Content-Length
+		int drain_clen = 0;
+		while (http_read_line(rtspcld->fd, line, sizeof(line), 1000, true) > 0) {
+			if (line[0] == '\0') break;  // blank line = end of headers
+			dp = strstr(line, ":");
+			if (dp && !strcasecmp(line, "Content-Length")) {
+				*dp = 0;
+				drain_clen = atol(dp + 1);
+			}
+		}
+		// drain body if Content-Length was found
+		if (drain_clen > 0) {
+			char *drain_buf = malloc(drain_clen);
+			if (drain_buf) {
+				int remaining = drain_clen;
+				while (remaining > 0) {
+					int n = recv(rtspcld->fd, drain_buf, remaining, 0);
+					if (n <= 0) break;
+					remaining -= n;
+				}
+				free(drain_buf);
+			}
 		}
 		if (get_response == 1) return false;
 	} else {
