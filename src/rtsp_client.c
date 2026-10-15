@@ -563,15 +563,10 @@ bool rtspcl_teardown(struct rtspcl_s *p) {
 static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type,
 				char *content, int length, int get_response, key_data_t *hds,
 				key_data_t *rkd, char **resp_content, int *resp_len, char* url) {
-	char line[2048] = "";
 	char *req;
 	char buf[128];
-	const char delimiters[] = " ";
-	char *token,*dp;
-	int i, rval, len, clen;
-	int timeout = 10000; // msec unit
+	int i, len, rval;
 	struct pollfd pfds;
-	key_data_t lkd[MAX_KD], *pkd;
 
 	if (!rtspcld || rtspcld->fd == -1) return false;
 
@@ -652,85 +647,49 @@ static bool exec_request(struct rtspcl_s *rtspcld, char *cmd, char *content_type
 
 	if (!get_response) return true;
 
-	if (http_read_line(rtspcld->fd, line, sizeof(line), timeout, true) <= 0) {
-		LOG_ERROR("[%p]: response : %s request failed", rtspcld, line);
-		if (get_response == 1) return false;
-		else return true;
+	const char delimiters[] = " ";
+	char *token, *body = NULL, *request = NULL;
+	int clen = 0;
+	bool result = true;
+	key_data_list_t headers = { 
+		.count = rkd ? 0 : MAX_KD, 
+		.kd = rkd ? rkd : (key_data_t[MAX_KD]) { { 0 } } 
+	};
+
+	if (http_parse_simple(rtspcld->fd, &request, &headers, &body, &clen, 10000) <= 0) {
+		LOG_ERROR("[%p]: response : %s request failed", rtspcld, request ? request : "");
+		if (get_response == 1) result = false;
+		goto cleanup;
 	}
 
-	token = strtok(line, delimiters);
+	token = strtok(request, delimiters);
 	token = strtok(NULL, delimiters);
 
 	// ignore 501 when used with OPTIONS
 	if (token == NULL || strcmp(token, "200")) {
 		if (token == NULL || strcmp(token, "501") || strcmp(cmd, "OPTIONS")) {
-			LOG_ERROR("[%p]: <------ : request failed, error %s %s", rtspcld, line, (token ? token : ""));
+			LOG_ERROR("[%p]: <------ : request failed, error %s %s", rtspcld, request ? request : "", token ? token : "");
 		}
-		if (get_response == 1) return false;
+		if (get_response == 1) {
+			result = false;
+			goto cleanup;
+		}
 	} else {
 		LOG_DEBUG("[%p]: <------ : %s: request ok", rtspcld, token);
 	}
 
-	i = 0;
-	clen = 0;
-	if (rkd) pkd = rkd;
-	else pkd = lkd;
-	pkd[0].key = NULL;
-
-	while (http_read_line(rtspcld->fd, line, sizeof(line), timeout, true) > 0) {
-		LOG_DEBUG("[%p]: <------ : %s", rtspcld, line);
-		timeout = 1000; // once it started, it shouldn't take a long time
-
-		if (i && line[0] == ' ') {
-			size_t j;
-			for(j = 0; j < strlen(line); j++) if (line[j] != ' ') break;
-			pkd[i].data = strdup(line + j);
-			continue;
-		}
-
-		dp = strstr(line,":");
-
-		if (!dp){
-			LOG_ERROR("[%p]: Request failed, bad header", rtspcld);
-			kd_free(pkd);
-			return false;
-		}
-
-		*dp = 0;
-		pkd[i].key = strdup(line);
-		pkd[i].data = strdup(dp + 1);
-
-		if (!strcasecmp(pkd[i].key, "Content-Length")) clen = atol(pkd[i].data);
-
-		i++;
-		pkd[i].key = NULL;
+	// free various items that callers might not want
+cleanup:
+	if (result && resp_content) {
+		*resp_content = body;
+		if (resp_len) *resp_len = clen;
+	} else if (body) {
+		free(body);
 	}
+	
+	if (!result || !rkd) kd_free(headers.kd);
 
-	if (clen) {
-		char *data = malloc(clen);
-		int size = 0;
+	if (request) free(request);
 
-		while (data && size < clen) {
-			int bytes = recv(rtspcld->fd, data + size, clen - size, 0);
-			if (bytes <= 0) break;
-			size += bytes;
-		}
-
-		if (!data || size != clen) {
-			LOG_ERROR("[%p]: content length receive error %p %d", rtspcld, data, size);
-		}
-
-		LOG_INFO("[%p]: Body data len %d", rtspcld, clen, data);
-		if (*loglevel >= lDEBUG) logdump(data, clen);
-
-		if (resp_content) {
-			*resp_content = data;
-			if (resp_len) *resp_len = clen;
-		} else free(data);
-	}
-
-	pkd[i].key = NULL;
-	if (!rkd) kd_free(pkd);
-
-	return true;
+	return result;
 }

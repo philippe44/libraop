@@ -1,5 +1,10 @@
+2026-10-15
+ - fix teardown thread joinign even if not started (credits @YehhiAleksandra)
+ - add raopcl_repair option in cliraop (credits @YehhiAleksandra)
+ - grab headers and body in rtspcl::exec_request (credits @YehhiAleksandra)
+ 
 2026-10-14
- - fix teardown hanging when an HTTP receiver stops reading
+ - fix teardown hanging when an HTTP receiver stops reading (credits @007hacky007)
  - release client mutex on unsupported codec errors
  - fix Transport header leak when RTSP SETUP fails
 
