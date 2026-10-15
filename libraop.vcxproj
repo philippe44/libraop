@@ -17,14 +17,25 @@
     <ClCompile Include="src\alac.c" />
     <ClCompile Include="src\bplist.cpp" />
     <ClCompile Include="src\cliraop.c" />
+    <ClCompile Include="src\hap\pair-tlv.c" />
+    <ClCompile Include="src\hap\pair.c" />
+    <ClCompile Include="src\hap\pair_fruit_stub.c" />
+    <ClCompile Include="src\hap\pair_homekit.c" />
+    <ClCompile Include="src\hap\sodium_compat.c" />
     <ClCompile Include="src\pairing.cpp" />
     <ClCompile Include="src\password.c" />
+    <ClCompile Include="src\plist_bin.c" />
     <ClCompile Include="src\raop_client.c" />
     <ClCompile Include="src\raop_server.c" />
     <ClCompile Include="src\raop_streamer.c" />
     <ClCompile Include="src\rtsp_client.c" />
     <ClInclude Include="src\aes.h" />
     <ClInclude Include="src\aes_ctr.h" />
+    <ClInclude Include="src\hap\pair-internal.h" />
+    <ClInclude Include="src\hap\pair-tlv.h" />
+    <ClInclude Include="src\hap\pair.h" />
+    <ClInclude Include="src\hap\sodium.h" />
+    <ClInclude Include="src\plist_bin.h" />
     <ClInclude Include="src\raop_client.h" />
     <ClInclude Include="src\rtsp_client.h" />
   </ItemGroup>
@@ -79,8 +90,8 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>FLAC__NO_DLL;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32;OPENSSL_SUPPRESS_DEPRECATED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>crosstools\src;dmap-parser;libmdns\targets\include\mdnssvc;libmdns\targets\include\mdnssd;libcodecs\targets\include\faac;libcodecs\targets\include\flac;libcodecs\targets\include\shine;libcodecs\targets\include\addons;libpthreads4w\targets\win32\x86\include;libopenssl\targets\win32\x86\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>FLAC__NO_DLL;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_NONSTDC_NO_DEPRECATE;WIN32;OPENSSL_SUPPRESS_DEPRECATED;CONFIG_OPENSSL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>crosstools\src;src\hap;dmap-parser;libmdns\targets\include\mdnssvc;libmdns\targets\include\mdnssd;libcodecs\targets\include\faac;libcodecs\targets\include\flac;libcodecs\targets\include\shine;libcodecs\targets\include\addons;libpthreads4w\targets\win32\x86\include;libopenssl\targets\win32\x86\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <DisableSpecificWarnings>4267;4244;5105</DisableSpecificWarnings>
       <LanguageStandard>stdcpp17</LanguageStandard>

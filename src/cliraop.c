@@ -79,6 +79,7 @@ static int print_usage(char *argv[])
 			   "\t[-e] audio payload encryption\n"
 			   "\t[-u] for authentication (only if crypto present in TXT record)\n"
    			   "\t[-a] send ALAC compressed audio\n"
+			   "\t[-2] force AirPlay 2 (HomeKit transient pairing)\n"
 			   "\t[-s <secret>] (valid secret for AppleTV)\n"
 			   "\t[-P <password>] (device password)\n"
 			   "\t[-r] do AppleTV pairing\n"
@@ -176,7 +177,7 @@ int main(int argc, char *argv[]) {
 	enum {STOPPED, PAUSED, PLAYING } status;
 	raop_crypto_t crypto = RAOP_CLEAR;
 	uint64_t start = 0, start_at = 0, last = 0, frames = 0;
-	bool interactive = false, alac = false, pairing = false, repair_resume = false;
+	bool interactive = false, alac = false, pairing = false, repair_resume = false, ap2 = false;
 	char *secret = NULL, *md = NULL, *et = NULL, *am = NULL;
 	bool auth = false;
 	struct in_addr host = { INADDR_ANY };
@@ -213,6 +214,8 @@ int main(int argc, char *argv[]) {
 			auth = true;
 		} else if (!strcmp(argv[i],"-a")) {
 			alac = true;
+		} else if (!strcmp(argv[i],"-2")) {
+			ap2 = true;
 		} else if (!strcmp(argv[i], "-r")) {
 			pairing = true;
 		} else if (!strcmp(argv[i], "-R")) {
@@ -282,6 +285,8 @@ int main(int argc, char *argv[]) {
 		close_platform(interactive);
 		exit(1);
 	}
+
+	if (ap2) raopcl_set_airplay2(raopcl, 1);
 
 	// get player's address
 	player.hostent = gethostbyname(player.name);
