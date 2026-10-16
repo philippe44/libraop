@@ -10,10 +10,12 @@
  
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "platform.h"
 
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
+#include <openssl/evp.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <time.h>
@@ -28,6 +30,7 @@
 #include "rtsp_client.h"
 #include "raop_client.h"
 #include "aes.h"
+#include "hap/pair.h"
 
 #define MAX_BACKLOG 512
 
@@ -45,6 +48,11 @@
 #define MD_PROGRESS	0x04
 
 #define PUBKEY_SIZE	64
+
+// AirPlay 2 audio packets: payload is ChaCha20-Poly1305 encrypted and followed by tag and nonce
+#define AP2_TAG_SIZE		16
+#define AP2_NONCE_SIZE		8
+#define AP2_BUFFER_SIZE		(sizeof(rtp_header_t) + sizeof(rtp_audio_pkt_t) + MAX_FRAMES_PER_CHUNK * 4 + 256 + AP2_TAG_SIZE + AP2_NONCE_SIZE)
 
 #define RAOP_SEC(ntp) ((uint32_t) ((ntp) >> 32))
 #define RAOP_FRAC(ntp) ((uint32_t) (ntp))
@@ -108,6 +116,16 @@
  is done. The control thread could even ask playback to restart immediately, no
  audio data will be accepted until flush is actually done and synchronization
  will be maintained, even in case of restart at a given time
+
+ --- AirPlay 2 ---
+ HomePods and AppleTV running OS 27+ do not play AirPlay 1 (RAOP) streams
+ anymore, although they accept them. With AirPlay 2, a HomeKit "transient"
+ pairing (SRP) is done first, then the whole control connection is encrypted,
+ SETUP is done with binary plists (one for the session, one for the stream)
+ and audio packets payloads are encrypted with ChaCha20-Poly1305 using a key
+ we provide in the stream SETUP. Timing (NTP), sync and retransmits are the
+ same as AirPlay 1. The device also opens an "event" channel that we must
+ answer to and a POST /feedback must be sent regularly.
 */
 
 
@@ -174,6 +192,21 @@ typedef struct raopcl_s {
 	uint8_t md_caps;
 	uint16_t port_base, port_range;
 	char passwd[64];
+	char am[64];
+	// AirPlay 2
+	int ap2_mode;				// -1 auto, 0 never, 1 always
+	bool ap2;					// current connection is AirPlay 2
+	uint8_t shk[32];			// audio payload key, sent to the device in SETUP
+	EVP_CIPHER_CTX *ap2_cipher;
+	uint8_t *ap2_buf;			// scratch for encrypted packets
+	uint8_t shared_secret[64];
+	size_t shared_secret_len;
+	struct {
+		int fd;
+		pthread_t thread;
+		bool running;
+		struct pair_cipher_context *cipher;
+	} events;
 } raopcl_data_t;
 
 
@@ -182,10 +215,14 @@ static log_level 	*loglevel = &raop_loglevel;
 
 static void 	*_rtp_timing_thread(void *args);
 static void 	*_rtp_control_thread(void *args);
+static void 	*_rtp_events_thread(void *args);
 static void 	_raopcl_terminate_rtp(struct raopcl_s *p);
 static void 	_raopcl_send_sync(struct raopcl_s *p, bool first);
 static bool 	_raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size);
+static int 		_raopcl_frame(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, uint8_t *out);
 static bool 	_raopcl_disconnect(struct raopcl_s *p, bool force);
+static bool 	_raopcl_events_connect(struct raopcl_s *p, uint16_t port);
+static void 	_raopcl_events_close(struct raopcl_s *p);
 
 /*----------------------------------------------------------------------------*/
 raop_state_t raopcl_state(struct raopcl_s *p)
@@ -283,6 +320,13 @@ bool raopcl_is_playing(struct raopcl_s *p)
 }
 
 /*----------------------------------------------------------------------------*/
+void raopcl_set_airplay2(struct raopcl_s *p, int mode)
+{
+	if (!p) return;
+	p->ap2_mode = mode;
+}
+
+/*----------------------------------------------------------------------------*/
 static int rsa_encrypt(uint8_t *text, int len, uint8_t *res)
 {
 	RSA *rsa;
@@ -343,6 +387,7 @@ static int raopcl_encrypt(raopcl_data_t *raopcld, uint8_t *data, int size)
 
 /*----------------------------------------------------------------------------*/
 bool raopcl_keepalive(struct raopcl_s *p) {
+	if (p->ap2) return rtspcl_ap2_feedback(p->rtspcl);
 	return rtspcl_options(p->rtspcl, NULL);
 }
 
@@ -601,6 +646,42 @@ bool raopcl_send_chunk(struct raopcl_s *p, uint8_t *sample, int frames, uint64_t
 }
 
 /*----------------------------------------------------------------------------*/
+/*
+ AirPlay 2 audio packet: the RTP header is in clear, the payload is encrypted
+ with ChaCha20-Poly1305 (key is the "shk" sent in SETUP, timestamp and ssrc are
+ the additional data), followed by the 16 bytes tag and the last 8 bytes of the
+ nonce. We use the RTP sequence number as nonce so that retransmitted packets
+ are bit-identical. Must be called with mutex locked (shared cipher context)
+*/
+static int _raopcl_frame(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size, uint8_t *out)
+{
+	uint8_t nonce[12] = { 0 };
+	uint16_t seq = (packet->hdr.seq[0] << 8) | packet->hdr.seq[1];
+	int len, hdr = sizeof(rtp_audio_pkt_t);
+
+	if (!p->ap2) {
+		memcpy(out, packet, size);
+		return size;
+	}
+
+	for (int i = 0; i < AP2_NONCE_SIZE; i++) nonce[4 + i] = (uint8_t) ((uint64_t) seq >> (8 * i));
+	memcpy(out, packet, hdr);
+
+	if (EVP_EncryptInit_ex(p->ap2_cipher, EVP_chacha20_poly1305(), NULL, p->shk, nonce) != 1 ||
+		EVP_EncryptUpdate(p->ap2_cipher, NULL, &len, (uint8_t*) packet + 4, 8) != 1 ||
+		EVP_EncryptUpdate(p->ap2_cipher, out + hdr, &len, (uint8_t*) packet + hdr, size - hdr) != 1 ||
+		EVP_EncryptFinal_ex(p->ap2_cipher, out + hdr + len, &len) != 1 ||
+		EVP_CIPHER_CTX_ctrl(p->ap2_cipher, EVP_CTRL_AEAD_GET_TAG, AP2_TAG_SIZE, out + size) != 1) {
+		LOG_ERROR("[%p]: audio packet encryption failed", p);
+		return 0;
+	}
+
+	memcpy(out + size + AP2_TAG_SIZE, nonce + 4, AP2_NONCE_SIZE);
+
+	return size + AP2_TAG_SIZE + AP2_NONCE_SIZE;
+}
+
+/*----------------------------------------------------------------------------*/
 bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 {
 	struct timeval timeout;
@@ -608,6 +689,7 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 	struct sockaddr_in addr;
 	size_t n;
 	bool ret = true;
+	uint8_t *data = (uint8_t*) packet;
 
 	/*
 	 Do not send if audio port closed or we are not yet in streaming state. We
@@ -618,6 +700,11 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 	 connect has returned in case of multi-threaded application
 	*/
 	if (p->rtp_ports.audio.fd == -1 || p->state != RAOP_STREAMING) return false;
+
+	if (p->ap2) {
+		if ((size = _raopcl_frame(p, packet, size, p->ap2_buf)) == 0) return false;
+		data = p->ap2_buf;
+	}
 
 	addr.sin_family = AF_INET;
 	addr.sin_addr = p->peer_addr;
@@ -641,8 +728,8 @@ bool _raopcl_send_audio(struct raopcl_s *p, rtp_audio_pkt_t *packet, int size)
 	else p->sane.audio.select = 0;
 
 	if (FD_ISSET(p->rtp_ports.audio.fd, &wfds)) {
-		n = sendto(p->rtp_ports.audio.fd, (void*) packet, + size, 0, (void*) &addr, sizeof(addr));
-		if (n != size) {
+		n = sendto(p->rtp_ports.audio.fd, (void*) data, size, 0, (void*) &addr, sizeof(addr));
+		if (n != (size_t) size) {
 			LOG_DEBUG("[%p]: error sending audio packet", p);
 			ret = false;
 			p->sane.audio.send++;
@@ -691,6 +778,7 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	if (passwd) strncpy(raopcld->passwd, passwd, sizeof(raopcld->passwd) - 1);
 	if (secret) strncpy(raopcld->secret, secret, SECRET_SIZE);
 	if (et) strncpy(raopcld->et, et, 16);
+	if (am) strncpy(raopcld->am, am, sizeof(raopcld->am) - 1);
 	raopcld->latency_frames = max(latency_frames, RAOP_LATENCY_MIN);
 	raopcld->chunk_len = chunk_len;
 	strcpy(raopcld->DACP_id, DACP_id ? DACP_id : "");
@@ -698,6 +786,10 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	raopcld->host_addr = host;
 	raopcld->rtp_ports.ctrl.fd = raopcld->rtp_ports.time.fd = raopcld->rtp_ports.audio.fd = -1;
 	raopcld->seq_number = rand();
+	raopcld->ap2_mode = -1;
+	raopcld->events.fd = -1;
+	raopcld->ap2_cipher = EVP_CIPHER_CTX_new();
+	raopcld->ap2_buf = malloc(AP2_BUFFER_SIZE);
 
 	if (md && strchr(md, '0')) raopcld->md_caps |= MD_TEXT;
 	if (md && strchr(md, '1')) raopcld->md_caps |= MD_ARTWORK;
@@ -710,6 +802,8 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 	// init RTSP if needed
 	if (((raopcld->rtspcl = rtspcl_create(ua)) == NULL)) {
 		LOG_ERROR("[%p]: Cannot create RTSP context", raopcld);
+		EVP_CIPHER_CTX_free(raopcld->ap2_cipher);
+		free(raopcld->ap2_buf);
 		free(raopcld);
 		return NULL;
 	}
@@ -738,12 +832,18 @@ struct raopcl_s *raopcl_create(struct in_addr host, uint16_t port_base, uint16_t
 /*----------------------------------------------------------------------------*/
 static void _raopcl_terminate_rtp(struct raopcl_s *p)
 {
-	// Terminate RTP threads and close sockets
-	if (p->ctrl_running) pthread_join(p->ctrl_thread, NULL);
-	p->ctrl_running = false;
+	// Terminate RTP threads (if started) and close sockets
+	if (p->ctrl_running) {
+		p->ctrl_running = false;
+		pthread_join(p->ctrl_thread, NULL);
+	}
 
-	if (p->time_running) pthread_join(p->time_thread, NULL);
-	p->time_running = false;
+	if (p->time_running) {
+		p->time_running = false;
+		pthread_join(p->time_thread, NULL);
+	}
+
+	_raopcl_events_close(p);
 
 	if (p->rtp_ports.ctrl.fd != -1) closesocket(p->rtp_ports.ctrl.fd);
 	if (p->rtp_ports.time.fd != -1) closesocket(p->rtp_ports.time.fd);
@@ -960,6 +1060,17 @@ static bool raopcl_analyse_setup(struct raopcl_s *p, key_data_t *setup_kd)
 }
 
 /*----------------------------------------------------------------------------*/
+static bool _raopcl_open_udp(struct raopcl_s *p, sock_info_t *sock, bool blocking, uint16_t *count, uint16_t offset)
+{
+	do {
+		sock->lport = p->port_base + ((offset + (*count)++) % p->port_range);
+		sock->fd = open_udp_socket(p->host_addr, &sock->lport, blocking);
+	} while (sock->fd < 0 && *count < p->port_range);
+
+	return sock->fd >= 0;
+}
+
+/*----------------------------------------------------------------------------*/
 bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, bool set_volume)
 {
 	struct {
@@ -990,6 +1101,7 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 	VALGRIND_MAKE_MEM_DEFINED(&p->ssrc, sizeof(p->ssrc));
 
 	p->encrypt = (p->crypto != RAOP_CLEAR);
+	p->ap2 = false;
 	memset(&p->sane, 0, sizeof(p->sane));
 	p->retransmit = 0;
 
@@ -1008,70 +1120,120 @@ bool raopcl_connect(struct raopcl_s *p, struct in_addr peer, uint16_t destport, 
 
 	LOG_INFO("[%p]: local interface %s", p, rtspcl_local_ip(p->rtspcl));
 
-	// RTSP pairing verify for AppleTV
-	if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
+	/*
+	 AirPlay 2 is required for HomePods and AppleTV running OS 27+, but it is
+	 only done by default for these (Macs and others still accept AirPlay 1).
+	 GET /info tells if transient pairing is supported
+	*/
+	if (p->ap2_mode != 0 && (p->ap2_mode > 0 || strcasestr(p->am, "AudioAccessory") || strcasestr(p->am, "AppleTV"))) {
+		rtspcl_info_t info;
 
-	// Send pubkey for MFi devices
-	if (strchr(p->et, '4')) rtspcl_auth_setup(p->rtspcl);
+		if (rtspcl_get_info(p->rtspcl, &info)) {
+			bool transient = (info.features & RTSP_FEATURE_TRANSIENT_PAIRING) != 0;
 
-	// build sdp parameter
-	buf = strdup(inet_ntoa(peer));
-	sprintf(sdp,
-			"v=0\r\n"
-			"o=iTunes %s 0 IN IP4 %s\r\n"
-			"s=iTunes\r\n"
-			"c=IN IP4 %s\r\n"
-			"t=0 0\r\n",
-			sid, rtspcl_local_ip(p->rtspcl), buf);
-	free(buf);
+			LOG_INFO("[%p]: %s (%s %s) features:%016" PRIx64 " status:%" PRIx64 " transient pairing:%u", p,
+					 info.name, info.model, info.source_version, info.features, info.status_flags, transient);
 
-	if (!raopcl_set_sdp(p, sdp)) goto erexit;
+			if (transient || p->ap2_mode > 0) p->ap2 = true;
+
+			if (info.status_flags & (RTSP_STATUS_PIN_REQUIRED | RTSP_STATUS_PASSWORD_REQUIRED | RTSP_STATUS_ONE_TIME_PAIRING)) {
+				LOG_WARN("[%p]: device requires PIN/password/HomeKit pairing, transient pairing might fail (set speaker access to 'Everyone')", p);
+			}
+		} else if (p->ap2_mode > 0) {
+			LOG_WARN("[%p]: no /info response but AirPlay 2 is forced", p);
+			p->ap2 = true;
+		} else {
+			LOG_INFO("[%p]: no /info response, using AirPlay 1", p);
+		}
+	}
 
 	// AppleTV expects now the timing port ot be opened BEFORE the setup message
 	p->rtp_ports.time.rport = 0;
 
-	do {
-		p->rtp_ports.time.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
-		p->rtp_ports.time.fd = open_udp_socket(p->host_addr, &p->rtp_ports.time.lport, true);
-	} while (p->rtp_ports.time.fd < 0 && port.count < p->port_range);
-
-	if (p->rtp_ports.time.fd < 0) goto erexit;
+	if (!_raopcl_open_udp(p, &p->rtp_ports.time, true, &port.count, port.offset)) goto erexit;
 
 	p->time_running = true;
 	pthread_create(&p->time_thread, NULL, _rtp_timing_thread, (void*) p);
 
-	// RTSP ANNOUNCE
-	if (p->auth && p->crypto) {
-		base64_encode(&seed.sac, 16, &sac);
-		strremovechar(sac, '=');
-		if (!rtspcl_add_exthds(p->rtspcl, "Apple-Challenge", sac)) goto erexit;
-		if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd))goto erexit;
-		if (!rtspcl_mark_del_exthds(p->rtspcl, "Apple-Challenge")) goto erexit;
-	} else if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd)) {
-		goto erexit;
+	if (p->ap2) {
+		uint16_t event_port = 0;
+
+		LOG_INFO("[%p]: using AirPlay 2", p);
+
+		// payload is protected by ChaCha20, not by the old RSA/AES scheme
+		p->encrypt = false;
+
+		rtspcl_ap2_enable(p->rtspcl);
+
+		p->shared_secret_len = sizeof(p->shared_secret);
+		if (!rtspcl_ap2_pair_transient(p->rtspcl, p->shared_secret, &p->shared_secret_len)) goto erexit;
+
+		if (!rtspcl_ap2_setup_session(p->rtspcl, p->rtp_ports.time.lport, &event_port, NULL)) goto erexit;
+
+		// reverse connection used by the device to send us commands, not fatal if it fails
+		_raopcl_events_connect(p, event_port);
+
+		// open RTP sockets, need local ports here before sending SETUP
+		if (!_raopcl_open_udp(p, &p->rtp_ports.ctrl, true, &port.count, port.offset)) goto erexit;
+		if (!_raopcl_open_udp(p, &p->rtp_ports.audio, false, &port.count, port.offset)) goto erexit;
+
+		RAND_bytes(p->shk, sizeof(p->shk));
+		VALGRIND_MAKE_MEM_DEFINED(p->shk, sizeof(p->shk));
+
+		// the device checks our timing port before it answers: no answer means it cannot reach it
+		if (!rtspcl_ap2_setup_stream(p->rtspcl, p->rtp_ports.ctrl.lport, p->shk, sizeof(p->shk), seed.sid,
+									 p->codec != RAOP_PCM, p->sample_rate, p->chunk_len,
+									 RAOP_LATENCY_MIN, max(88200, raopcl_latency(p)),
+									 &p->rtp_ports.audio.rport, &p->rtp_ports.ctrl.rport)) {
+			LOG_ERROR("[%p]: stream SETUP failed, check that the device can reach our UDP port %hu (firewall, Docker bridge)", p, p->rtp_ports.time.lport);
+			goto erexit;
+		}
+	} else {
+		// RTSP pairing verify for AppleTV
+		if (*p->secret && !rtspcl_pair_verify(p->rtspcl, p->secret)) goto erexit;
+
+		// Send pubkey for MFi devices
+		if (strchr(p->et, '4')) rtspcl_auth_setup(p->rtspcl);
+
+		// build sdp parameter
+		buf = strdup(inet_ntoa(peer));
+		sprintf(sdp,
+				"v=0\r\n"
+				"o=iTunes %s 0 IN IP4 %s\r\n"
+				"s=iTunes\r\n"
+				"c=IN IP4 %s\r\n"
+				"t=0 0\r\n",
+				sid, rtspcl_local_ip(p->rtspcl), buf);
+		free(buf);
+
+		if (!raopcl_set_sdp(p, sdp)) goto erexit;
+
+		// RTSP ANNOUNCE
+		if (p->auth && p->crypto) {
+			base64_encode(&seed.sac, 16, &sac);
+			strremovechar(sac, '=');
+			if (!rtspcl_add_exthds(p->rtspcl, "Apple-Challenge", sac)) goto erexit;
+			if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd))goto erexit;
+			if (!rtspcl_mark_del_exthds(p->rtspcl, "Apple-Challenge")) goto erexit;
+		} else if (!rtspcl_announce_sdp(p->rtspcl, sdp, p->passwd)) {
+			goto erexit;
+		}
+
+		// open RTP sockets, need local ports here before sending SETUP
+		if (!_raopcl_open_udp(p, &p->rtp_ports.ctrl, true, &port.count, port.offset)) goto erexit;
+		if (!_raopcl_open_udp(p, &p->rtp_ports.audio, false, &port.count, port.offset)) goto erexit;
+
+		// RTSP SETUP : get all RTP destination ports
+		if (!rtspcl_setup(p->rtspcl, &p->rtp_ports, kd)) goto erexit;
+		if (!raopcl_analyse_setup(p, kd)) goto erexit;
+		kd_free(kd);
 	}
-
-	// open RTP sockets, need local ports here before sending SETUP
-	do {
-		p->rtp_ports.ctrl.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
-		p->rtp_ports.ctrl.fd = open_udp_socket(p->host_addr, &p->rtp_ports.ctrl.lport, true);
-	} while (p->rtp_ports.ctrl.fd < 0 && port.count < p->port_range);
-	do {
-		p->rtp_ports.audio.lport = p->port_base + ((port.offset + port.count++) % p->port_range);
-		p->rtp_ports.audio.fd = open_udp_socket(p->host_addr, &p->rtp_ports.audio.lport, false);
-	} while (p->rtp_ports.audio.fd < 0 && port.count < p->port_range);
-
-	if (p->rtp_ports.ctrl.fd < 0 ||  p->rtp_ports.audio.fd < 0) goto erexit;
-
-	// RTSP SETUP : get all RTP destination ports
-	if (!rtspcl_setup(p->rtspcl, &p->rtp_ports, kd)) goto erexit;
-	if (!raopcl_analyse_setup(p, kd)) goto erexit;
-	kd_free(kd);
 
 	LOG_DEBUG( "[%p]:opened audio socket   l:%5d r:%d", p, p->rtp_ports.audio.lport, p->rtp_ports.audio.rport );
 	LOG_DEBUG( "[%p]:opened timing socket  l:%5d r:%d", p, p->rtp_ports.time.lport, p->rtp_ports.time.rport );
 	LOG_DEBUG( "[%p]:opened control socket l:%5d r:%d", p, p->rtp_ports.ctrl.lport, p->rtp_ports.ctrl.rport );
 
+	kd[0].key = NULL;
 	if (!rtspcl_record(p->rtspcl, p->seq_number + 1, NTP2TS(raopcl_get_ntp(NULL), p->sample_rate), kd)) goto erexit;
 
 	if (kd_lookup(kd, "Audio-Latency")) {
@@ -1151,6 +1313,8 @@ bool _raopcl_disconnect(struct raopcl_s *p, bool force)
 	rc &= rtspcl_disconnect(p->rtspcl);
 	rc &= rtspcl_remove_all_exthds(p->rtspcl);
 
+	p->ap2 = false;
+
 	return rc;
 }
 
@@ -1203,6 +1367,9 @@ bool raopcl_destroy(struct raopcl_s *p)
 	}
 
 	if (p->alac_codec) alac_delete_encoder(p->alac_codec);
+
+	EVP_CIPHER_CTX_free(p->ap2_cipher);
+	free(p->ap2_buf);
 
 	free(p);
 
@@ -1414,12 +1581,27 @@ void *_rtp_control_thread(void *args)
 
 				if (raopcld->backlog[index].seq_number == lost.seq_number + i) {
 					struct sockaddr_in addr;
-					rtp_header_t *hdr = (rtp_header_t*) raopcld->backlog[index].buffer;
+					uint8_t *buffer = raopcld->backlog[index].buffer;
+					rtp_header_t *hdr;
+					int size = raopcld->backlog[index].size;
 
 					// packet have been released meanwhile, be extra cautious
-					if (!hdr) {
+					if (!buffer) {
 						missed++;
 						continue;
+					}
+
+					if (raopcld->ap2) {
+						// re-encrypt into the scratch buffer, nonce is the sequence so result is identical
+						hdr = (rtp_header_t*) raopcld->ap2_buf;
+						size = _raopcl_frame(raopcld, (rtp_audio_pkt_t*) (buffer + sizeof(rtp_header_t)), size,
+											 raopcld->ap2_buf + sizeof(rtp_header_t));
+						if (!size) {
+							missed++;
+							continue;
+						}
+					} else {
+						hdr = (rtp_header_t*) buffer;
 					}
 
 					hdr->proto = 0x80;
@@ -1434,7 +1616,7 @@ void *_rtp_control_thread(void *args)
 					raopcld->retransmit++;
 
 					n = sendto(raopcld->rtp_ports.ctrl.fd, (void*) hdr,
-							   sizeof(rtp_header_t) + raopcld->backlog[index].size,
+							   sizeof(rtp_header_t) + size,
 							   0, (void*) &addr, sizeof(addr));
 
 					if (n == -1) {
@@ -1456,6 +1638,149 @@ void *_rtp_control_thread(void *args)
 		}
 
 		_raopcl_send_sync(raopcld, false);
+	}
+
+	return NULL;
+}
+
+/*----------------------------------------------------------------------------*/
+/* AirPlay 2 event channel                                                    */
+/*----------------------------------------------------------------------------*/
+static bool _raopcl_events_connect(struct raopcl_s *p, uint16_t port)
+{
+	if (!port) {
+		LOG_WARN("[%p]: no event port given by device", p);
+		return false;
+	}
+
+	for (int i = 0; i < 3 && p->events.fd == -1; i++) {
+		int fd = open_tcp_socket(p->host_addr, NULL, true);
+
+		if (fd == -1) return false;
+
+		if (tcp_connect_by_host(fd, p->peer_addr, port)) p->events.fd = fd;
+		else {
+			closesocket(fd);
+			usleep(250000);
+		}
+	}
+
+	if (p->events.fd == -1) {
+		LOG_WARN("[%p]: cannot connect to event port %hu, proceeding anyway", p, port);
+		return false;
+	}
+
+	p->events.cipher = pair_cipher_new(PAIR_CLIENT_HOMEKIT_TRANSIENT, PAIR_CHANNEL_EVENTS, p->shared_secret, p->shared_secret_len, NULL);
+	if (!p->events.cipher) {
+		LOG_WARN("[%p]: cannot create event channel cipher", p);
+		closesocket(p->events.fd);
+		p->events.fd = -1;
+		return false;
+	}
+
+	p->events.running = true;
+	pthread_create(&p->events.thread, NULL, _rtp_events_thread, (void*) p);
+
+	LOG_INFO("[%p]: connected to event port %hu", p, port);
+
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+static void _raopcl_events_close(struct raopcl_s *p)
+{
+	if (p->events.running) {
+		p->events.running = false;
+		pthread_join(p->events.thread, NULL);
+	}
+
+	if (p->events.fd != -1) {
+		closesocket(p->events.fd);
+		p->events.fd = -1;
+	}
+
+	if (p->events.cipher) {
+		pair_cipher_free(p->events.cipher);
+		p->events.cipher = NULL;
+	}
+}
+
+/*
+ The device sends RTSP-like requests (e.g. POST /command with a plist) on the
+ event channel, encrypted. We don't act on them but we must acknowledge them
+*/
+void *_rtp_events_thread(void *args)
+{
+	raopcl_data_t *p = (raopcl_data_t*) args;
+	uint8_t enc[8192];
+	char plain[8192];
+	size_t enc_len = 0, plain_len = 0;
+
+	while (p->events.running) {
+		struct pollfd pfd = { .fd = p->events.fd, .events = POLLIN };
+		uint8_t *out = NULL;
+		size_t out_len = 0;
+		ssize_t used;
+		int n;
+
+		if (poll(&pfd, 1, 500) <= 0) continue;
+
+		n = recv(p->events.fd, (char*) enc + enc_len, sizeof(enc) - enc_len, 0);
+		if (n <= 0) {
+			LOG_INFO("[%p]: event channel closed by device", p);
+			break;
+		}
+
+		enc_len += n;
+		if (enc_len < 2) continue;
+
+		used = pair_decrypt(&out, &out_len, enc, enc_len, p->events.cipher);
+		if (used < 0) {
+			LOG_WARN("[%p]: event channel decryption error (%s)", p, pair_cipher_errmsg(p->events.cipher));
+			break;
+		}
+
+		memmove(enc, enc + used, enc_len - used);
+		enc_len -= used;
+
+		if (plain_len + out_len >= sizeof(plain)) {
+			LOG_WARN("[%p]: event request too large, closing event channel", p);
+			free(out);
+			break;
+		}
+
+		memcpy(plain + plain_len, out, out_len);
+		plain_len += out_len;
+		plain[plain_len] = '\0';
+		free(out);
+
+		// answer every complete request
+		while (plain_len) {
+			char *field, *end = strstr(plain, "\r\n\r\n"), cseq[16] = "", rsp[256];
+			size_t hlen, clen = 0;
+			int len;
+
+			if (!end) break;
+			hlen = end + 4 - plain;
+
+			if ((field = strstr(plain, "Content-Length:")) != NULL && field < end) clen = strtoul(field + 15, NULL, 10);
+			if (plain_len < hlen + clen) break;
+			if ((field = strstr(plain, "CSeq:")) != NULL && field < end) sscanf(field + 5, " %15[0-9]", cseq);
+
+			LOG_INFO("[%p]: event: %.*s", p, (int) strcspn(plain, "\r"), plain);
+
+			len = snprintf(rsp, sizeof(rsp), "RTSP/1.0 200 OK\r\nServer: AirTunes/366.0\r\n%s%s%sContent-Length: 0\r\n\r\n",
+						   *cseq ? "CSeq: " : "", cseq, *cseq ? "\r\n" : "");
+
+			if (pair_encrypt(&out, &out_len, (uint8_t*) rsp, len, p->events.cipher) >= 0) {
+				send(p->events.fd, (char*) out, out_len, 0);
+				free(out);
+			}
+
+			memmove(plain, plain + hlen + clen, plain_len - hlen - clen);
+			plain_len -= hlen + clen;
+			plain[plain_len] = '\0';
+		}
 	}
 
 	return NULL;
