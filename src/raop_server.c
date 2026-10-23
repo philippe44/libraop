@@ -271,45 +271,43 @@ void  raopsr_notify(struct raopsr_s *ctx, raopsr_event_t event, void *param) {
 	addr.sin_addr = ctx->active_remote.host;
 	addr.sin_port = htons(ctx->active_remote.port);
 
-	if (!connect(sock, (struct sockaddr*)&addr, sizeof(addr))) {
-		/* This is reached from callbacks that run with the owner's device mutex
-		   held. A blocking connect() to a controller that has gone to sleep,
-		   changed address or left the network does not fail fast - it stalls for
-		   the kernel's SYN-retry budget (over two minutes on Linux) while holding
-		   that mutex, which blocks every other event for the device, including the
-		   one that starts playback. Bound the connect, and the exchange after it. */
-		set_nonblock(sock);
-		
-		if (!tcp_connect_timeout(sock, addr, REMOTE_CTRL_TIMEOUT_MS)) {
-			char* method, * buf, resp[512] = "";
-			int len;
-			key_data_t headers[4] = { {NULL, NULL} };
+	/* This is reached from callbacks that run with the owner's device mutex
+	   held. A blocking connect() to a controller that has gone to sleep,
+	   changed address or left the network does not fail fast - it stalls for
+	   the kernel's SYN-retry budget (over two minutes on Linux) while holding
+	   that mutex, which blocks every other event for the device, including the
+	   one that starts playback. Bound the connect, and the exchange after it. */
+	set_nonblock(sock);
+	
+	if (!tcp_connect_timeout(sock, addr, REMOTE_CTRL_TIMEOUT_MS)) {
+		char* method, * buf, resp[512] = "";
+		int len;
+		key_data_t headers[4] = { {NULL, NULL} };
 #if WIN
-			DWORD tv = REMOTE_CTRL_TIMEOUT_MS;
+		DWORD tv = REMOTE_CTRL_TIMEOUT_MS;
 #else
-			struct timeval tv = { REMOTE_CTRL_TIMEOUT_MS / 1000, (REMOTE_CTRL_TIMEOUT_MS % 1000) * 1000 };
+		struct timeval tv = { REMOTE_CTRL_TIMEOUT_MS / 1000, (REMOTE_CTRL_TIMEOUT_MS % 1000) * 1000 };
 #endif
-			
-			set_block(sock);
-			setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (void*)&tv, sizeof(tv));
-			setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (void*)&tv, sizeof(tv));
+		
+		set_block(sock);
+		setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (void*)&tv, sizeof(tv));
+		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (void*)&tv, sizeof(tv));
 
-			(void)!asprintf(&method, "GET /ctrl-int/1/%s HTTP/1.0", command);
-			kd_add(headers, "Active-Remote", ctx->active_remote.id);
-			kd_add(headers, "Connection", "close");
+		(void)!asprintf(&method, "GET /ctrl-int/1/%s HTTP/1.0", command);
+		kd_add(headers, "Active-Remote", ctx->active_remote.id);
+		kd_add(headers, "Connection", "close");
 
-			buf = http_send(sock, method, headers);
-			len = recv(sock, resp, sizeof(resp), 0);
-			if (len > 0) resp[len-1] = '\0';
-			LOG_INFO("[%p]: sending airplay remote\n%s<== received ==>\n%s", ctx, buf, resp);
+		buf = http_send(sock, method, headers);
+		len = recv(sock, resp, sizeof(resp), 0);
+		if (len > 0) resp[len-1] = '\0';
+		LOG_INFO("[%p]: sending airplay remote\n%s<== received ==>\n%s", ctx, buf, resp);
 
-			NFREE(method);
-			NFREE(buf);
-			kd_free(headers);
-		} else {
-			LOG_WARN("[%p]: remote control %s:%hu unreachable, dropping '%s'", ctx,
-				inet_ntoa(ctx->active_remote.host), ctx->active_remote.port, command);
-		}
+		NFREE(method);
+		NFREE(buf);
+		kd_free(headers);
+	} else {
+		LOG_WARN("[%p]: remote control %s:%hu unreachable, dropping '%s'", ctx,
+			inet_ntoa(ctx->active_remote.host), ctx->active_remote.port, command);
 	}
 
 	free(command);
@@ -769,4 +767,3 @@ static void on_dmap_string(void *ctx, const char *code, const char *name, const 
 	else if (!strcasecmp(code, "asar")) metadata->artist = strndup(buf, len);
 	else if (!strcasecmp(code, "asal")) metadata->album = strndup(buf, len);
 }
-
