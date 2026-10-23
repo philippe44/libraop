@@ -7,7 +7,7 @@
  * See LICENSE
  *
  */
- 
+
  #ifndef __RTSP_CLIENT_H
 #define __RTSP_CLIENT_H
 
@@ -22,6 +22,21 @@ typedef struct rtp_port_s {
 	sock_info_t	ctrl;
 	sock_info_t audio;
 } rtp_port_t;
+
+// what a device tells about itself in GET /info (AirPlay 2 capable devices)
+typedef struct rtspcl_info_s {
+	uint64_t features;
+	uint64_t status_flags;
+	char model[64];
+	char name[64];
+	char source_version[32];
+} rtspcl_info_t;
+
+#define RTSP_FEATURE_HK_PAIRING			(1ULL << 46)
+#define RTSP_FEATURE_TRANSIENT_PAIRING	(1ULL << 48)
+#define RTSP_STATUS_PIN_REQUIRED		(1ULL << 3)
+#define RTSP_STATUS_PASSWORD_REQUIRED	(1ULL << 7)
+#define RTSP_STATUS_ONE_TIME_PAIRING	(1ULL << 9)
 
 struct rtspcl_s *rtspcl_create(char const *user_name);
 bool   			rtspcl_destroy(struct rtspcl_s *p);
@@ -45,5 +60,21 @@ bool rtspcl_remove_all_exthds(struct rtspcl_s *p);
 bool rtspcl_add_exthds(struct rtspcl_s *p, char *key, char *data);
 bool rtspcl_mark_del_exthds(struct rtspcl_s *p, char *key);
 char* rtspcl_local_ip(struct rtspcl_s *p);
+
+/*
+ AirPlay 2: HomeKit transient pairing, encrypted control channel and plist
+ based SETUP. Sequence is get_info (optional) -> ap2_enable -> ap2_pair_transient
+ -> ap2_setup_session -> ap2_setup_stream -> record, then feedback periodically.
+ For ap2_pair_transient, *secret_len is the size of shared_secret on input and
+ the length of the secret (needed for the event channel cipher) on output
+*/
+bool rtspcl_get_info(struct rtspcl_s *p, rtspcl_info_t *info);
+bool rtspcl_ap2_enable(struct rtspcl_s *p);
+bool rtspcl_ap2_pair_transient(struct rtspcl_s *p, uint8_t *shared_secret, size_t *secret_len);
+bool rtspcl_ap2_setup_session(struct rtspcl_s *p, uint16_t timing_lport, uint16_t *event_port, uint16_t *timing_rport);
+bool rtspcl_ap2_setup_stream(struct rtspcl_s *p, uint16_t ctrl_lport, const uint8_t *shk, size_t shk_len,
+							 uint32_t stream_id, bool alac, int sample_rate, int frames_per_packet,
+							 uint32_t latency_min, uint32_t latency_max, uint16_t *data_port, uint16_t *ctrl_port);
+bool rtspcl_ap2_feedback(struct rtspcl_s *p);
 
 #endif

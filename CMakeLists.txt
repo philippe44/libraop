@@ -58,9 +58,9 @@ else()
 endif()
 
 # Main target sources
-file(GLOB SOURCES src/*.cpp src/*.c ${BASE}/crosstools/src/*.c)
+file(GLOB SOURCES src/*.cpp src/*.c src/hap/*.c ${BASE}/crosstools/src/*.c)
 list(APPEND SOURCES ${BASE}/dmap-parser/dmap_parser.c)
-list(APPEND EXTRA_INCLUDES src)
+list(APPEND EXTRA_INCLUDES src src/hap)
 add_executable(${PROJECT} ${SOURCES})
 
 # Other includes
@@ -102,5 +102,5 @@ if(NOT MSVC)
 	endif()
 endif()
 
-target_compile_definitions(${PROJECT} PRIVATE -DNDEBUG -D_GNU_SOURCE)
+target_compile_definitions(${PROJECT} PRIVATE -DNDEBUG -D_GNU_SOURCE -DCONFIG_OPENSSL)
 target_include_directories(${PROJECT} PRIVATE "." ${EXTRA_INCLUDES})
