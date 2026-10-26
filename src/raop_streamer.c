@@ -507,8 +507,10 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	if (test_packet.count > 3500) test_packet.count = 0;
 #endif
 
-	// release as soon as one recent frame is received
-	if (ctx->pause && seq_order(ctx->first_seqno, seqno)) ctx->pause = false;
+	/* release as soon as one recent frame is received. When the FLUSH point has already been
+	 * passed (RTP_WAIT/RTP_STREAM -> RTP_PLAY), first_seqno is back to -1, which seq_order sees
+	 * as 65535: pause would then only be released after seqno wraps (up to ~4.4 minutes) */
+	if (ctx->pause && (ctx->first_seqno == -1 || seq_order(ctx->first_seqno, seqno))) ctx->pause = false;
 
 	abuf_t* abuf = ctx->audio_buffer + BUFIDX(seqno);
 
