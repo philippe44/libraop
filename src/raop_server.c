@@ -531,8 +531,9 @@ static bool handle_rtsp(raopsr_t* ctx, int sock)
 		char *p;
 
 		if (atoi(ctx->latencies)) {
-			char latency[6];
-			snprintf(latency, 6, "%u", (atoi(ctx->latencies) * 44100) / 1000);
+			// 6 digits are needed above 2267 ms (99999 frames)
+			char latency[12];
+			snprintf(latency, sizeof(latency), "%u", (unsigned) ((atoi(ctx->latencies) * 44100ULL) / 1000));
 			kd_add(resp, "Audio-Latency", latency);
 		}
 
