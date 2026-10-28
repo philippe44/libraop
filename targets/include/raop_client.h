@@ -135,6 +135,9 @@ bool 	raopcl_disconnect(struct raopcl_s *p);
 bool    raopcl_flush(struct raopcl_s *p);
 bool 	raopcl_keepalive(struct raopcl_s *p);
 
+// AirPlay 2 (HomeKit transient pairing): -1 = auto (HomePod/AppleTV when supported), 0 = never, 1 = always
+void	raopcl_set_airplay2(struct raopcl_s *p, int mode);
+
 bool 	 raopcl_set_progress(struct raopcl_s *p, uint64_t elapsed, uint64_t end);
 bool 	 raopcl_set_progress_ms(struct raopcl_s *p, uint32_t elapsed, uint32_t duration);
 uint64_t raopcl_get_progress_ms(struct raopcl_s* p);

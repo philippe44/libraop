@@ -19,7 +19,7 @@ BUILDDIR   = $(dir $(CORE))$(HOST)/$(PLATFORM)
 LIB        = lib/$(HOST)/$(PLATFORM)/libraop.a
 EXECUTABLE = $(CORE)-$(PLATFORM)
 
-DEFINES  = -DNDEBUG -D_GNU_SOURCE -DOPENSSL_SUPPRESS_DEPRECATED
+DEFINES  = -DNDEBUG -D_GNU_SOURCE -DOPENSSL_SUPPRESS_DEPRECATED -DCONFIG_OPENSSL
 CFLAGS  += -Wall -fPIC -ggdb -O2 $(DEFINES) -fdata-sections -ffunction-sections
 LDFLAGS += -lpthread -ldl -lm -L.
 
@@ -30,7 +30,7 @@ MDNS		= libmdns/targets
 CODECS		= libcodecs/targets
 OPENSSL		= libopenssl/targets/$(HOST)/$(PLATFORM)
 
-vpath %.c $(TOOLS):$(SRC):$(DMAP_PARSER)
+vpath %.c $(TOOLS):$(SRC):$(DMAP_PARSER):$(SRC)/hap
 vpath %.cpp $(TOOLS):$(SRC)
 
 INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
@@ -40,7 +40,7 @@ INCLUDE = -I$(VALGRIND)/memcheck -I$(VALGRIND)/include \
 	  -I$(OPENSSL)/include \
 	  -I$(CODECS)/include/addons -I$(CODECS)/include/flac \
 	  -I$(CODECS)/include/shine -I$(CODECS)/include/faac \
-	  -I$(SRC) -I$(SRC)/inc
+	  -I$(SRC) -I$(SRC)/inc -I$(SRC)/hap
 		  
 CURVE25519_SOURCES = curve25519_dh.c curve25519_mehdi.c curve25519_order.c curve25519_utils.c custom_blind.c\
                      ed25519_sign.c ed25519_verify.c \		  
@@ -50,7 +50,8 @@ SOURCES = raop_client.c rtsp_client.c \
 	  aes.c aes_ctr.c \
 	  dmap_parser.c	\
 	  alac.c \
-	  bplist.cpp pairing.cpp password.c
+	  bplist.cpp pairing.cpp password.c \
+	  plist_bin.c pair.c pair_homekit.c pair-tlv.c pair_fruit_stub.c sodium_compat.c
 		  
 SOURCES_BIN = cross_log.c cross_ssl.c cross_util.c cross_net.c platform.c cliraop.c 		  
 		  
