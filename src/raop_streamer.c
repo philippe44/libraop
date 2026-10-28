@@ -446,9 +446,14 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	 * a catch that recent iOS send silence frames just after flush when paused */
 
 	// if we have a pending first seqno and we are below, always ignore it
-	if (ctx->first_seqno != -1 && seq_order(seqno, ctx->first_seqno)) {
-		pthread_mutex_unlock(&ctx->ab_mutex);
-		return;
+	if (ctx->first_seqno != -1) {
+		if (seq_order(seqno, ctx->first_seqno)) {
+			pthread_mutex_unlock(&ctx->ab_mutex);
+			return;
+		// in flush workaround mode, we stay in RTP_PLAY mode and must reset first_seqno once reached
+		} else if (!ctx->pause && ctx->state == RTP_PLAY && !seq_order(ctx->ab_read, ctx->first_seqno)) {
+			ctx->first_seqno = -1;
+		}
 	}
 
 	if (ctx->state == RTP_WAIT) {
@@ -507,8 +512,8 @@ static void buffer_put_packet(raopst_t* ctx, seq_t seqno, unsigned rtptime, bool
 	if (test_packet.count > 3500) test_packet.count = 0;
 #endif
 
-	// release as soon as one recent frame is received
-	if (ctx->pause && seq_order(ctx->first_seqno, seqno)) ctx->pause = false;
+	// release as soon as one recent frame is received, or we are not waiting for anything
+	if (ctx->pause && (ctx->first_seqno == -1 || seq_order(ctx->first_seqno, seqno))) ctx->pause = false;
 
 	abuf_t* abuf = ctx->audio_buffer + BUFIDX(seqno);
 

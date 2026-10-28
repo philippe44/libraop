@@ -1,5 +1,10 @@
+2026-10-28 
+ - in flush mode workaround, pause (silence) was kept when flush done wiht seqno > 32768 (credits noahp-info)
+ - in same mode, wrap-up of seqno caused sielnce again as first_seqno was not cleared (credits noahp-info)
+ - fix latency truncation (credits noahp-info)
+ 
 2026-10-15
- - fix teardown thread joinign even if not started (credits @YehhiAleksandra)
+ - fix teardown thread joining even if not started (credits @YehhiAleksandra)
  - add raopcl_repair option in cliraop (credits @YehhiAleksandra)
  - grab headers and body in rtspcl::exec_request (credits @YehhiAleksandra)
  
